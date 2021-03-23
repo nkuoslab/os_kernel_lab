@@ -1,0 +1,408 @@
+<center><h3>实验一 系统软件启动过程</h3></center>
+<div align='right'>学号： 1911463 姓名: 时浩铭 </div>
+<div align='right'>学号： 1911477 姓名: 王耀群 </div>
+<div align='right'>学号： 1911547 姓名: 李文婕 </div>
+
+### 练习1：理解通过`make`生成执行文件的过程。
+
+- 操作系统镜像文件`ucore.img`是如何一步一步生成的?
+- 一个被系统认为是符合规范的硬盘主引导扇区的特征是什么?
+
+-----
+
+#### `ucore.img`
+
+- 首先使用`make V=`命令编译、连接并打印出命令。略去警告以后得到如下命令。
+
+  ``` makefile
+  + cc kern/init/init.c
+  gcc -Ikern/init/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/init/init.c -o obj/kern/init/init.o
+  + cc kern/libs/stdio.c
+  gcc -Ikern/libs/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/libs/stdio.c -o obj/kern/libs/stdio.o
+  + cc kern/libs/readline.c
+  gcc -Ikern/libs/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/libs/readline.c -o obj/kern/libs/readline.o
+  + cc kern/debug/panic.c
+  gcc -Ikern/debug/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/debug/panic.c -o obj/kern/debug/panic.o
+  + cc kern/debug/kdebug.c
+  gcc -Ikern/debug/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/debug/kdebug.c -o obj/kern/debug/kdebug.o
+  gcc -Ikern/debug/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/debug/kmonitor.c -o obj/kern/debug/kmonitor.o
+  + cc kern/driver/clock.c
+  gcc -Ikern/driver/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/driver/clock.c -o obj/kern/driver/clock.o
+  + cc kern/driver/console.c
+  gcc -Ikern/driver/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/driver/console.c -o obj/kern/driver/console.o
+  + cc kern/driver/picirq.c
+  gcc -Ikern/driver/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/driver/picirq.c -o obj/kern/driver/picirq.o
+  + cc kern/driver/intr.c
+  gcc -Ikern/driver/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/driver/intr.c -o obj/kern/driver/intr.o
+  + cc kern/trap/trap.c
+  gcc -Ikern/trap/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/trap/trap.c -o obj/kern/trap/trap.o
+  gcc -Ikern/trap/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/trap/vectors.S -o obj/kern/trap/vectors.o
+  + cc kern/trap/trapentry.S
+  gcc -Ikern/trap/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/trap/trapentry.S -o obj/kern/trap/trapentry.o
+  + cc kern/mm/pmm.c
+  gcc -Ikern/mm/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Ikern/debug/ -Ikern/driver/ -Ikern/trap/ -Ikern/mm/ -c kern/mm/pmm.c -o obj/kern/mm/pmm.o
+  + cc libs/string.c
+  gcc -Ilibs/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/  -c libs/string.c -o obj/libs/string.o
+  + cc libs/printfmt.c
+  gcc -Ilibs/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/  -c libs/printfmt.c -o obj/libs/printfmt.o
+  + ld bin/kernel
+  ld -m    elf_i386 -nostdlib -T tools/kernel.ld -o bin/kernel  obj/kern/init/init.o obj/kern/libs/stdio.o obj/kern/libs/readline.o obj/kern/debug/panic.o obj/kern/debug/kdebug.o obj/kern/debug/kmonitor.o obj/kern/driver/clock.o obj/kern/driver/console.o obj/kern/driver/picirq.o obj/kern/driver/intr.o obj/kern/trap/trap.o obj/kern/trap/vectors.o obj/kern/trap/trapentry.o obj/kern/mm/pmm.o  obj/libs/string.o obj/libs/printfmt.o
+  + cc boot/bootasm.S
+  gcc -Iboot/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Os -nostdinc -c boot/bootasm.S -o obj/boot/bootasm.o
+  + cc boot/bootmain.c
+  gcc -Iboot/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Os -nostdinc -c boot/bootmain.c -o obj/boot/bootmain.o
+  + cc tools/sign.c
+  gcc -Itools/ -g -Wall -O2 -c tools/sign.c -o obj/sign/tools/sign.o
+  gcc -g -Wall -O2 obj/sign/tools/sign.o -o bin/sign
+  + ld bin/bootblock
+  ld -m    elf_i386 -nostdlib -N -e start -Ttext 0x7C00 obj/boot/bootasm.o obj/boot/bootmain.o -o obj/bootblock.o
+  'obj/bootblock.out' size: 496 bytes
+  build 512 bytes boot sector: 'bin/bootblock' success!
+  dd if=/dev/zero of=bin/ucore.img count=10000
+  ```
+  
+- 然后分析`makefile`。`ucore.img`产生位于`makefile`文件178-186行。其产生需要两个前置条件，`kernel`和`bootblock`
+
+  ```makefile
+  UCOREIMG	:= $(call totarget,ucore.img)
+  
+  $(UCOREIMG): $(kernel) $(bootblock)
+  	$(V)dd if=/dev/zero of=$@ count=10000
+  	$(V)dd if=$(bootblock) of=$@ conv=notrunc
+  	$(V)dd if=$(kernel) of=$@ seek=1 conv=notrunc
+  
+  $(call create_target,ucore.img)
+  ```
+
+  - `$(call VARIABLE,PARAM,PARAM,...)`：`call`函数是唯一一个可以用来创建新的参数化的函数。可以在一个表达式中可以定义许多参数，然后通过`call`函数来向这个表达式传递参数。`call`函数执行时，将参数依次赋给临时变量`$(1)`、`$(2)`，最后在对`VARIABLE`展开后的表达式进行处理，返回表达式的值。
+
+  - `dd`命令用于读取、转换并输出数据，可以从标准输入或文件中读取数据，根据指定的格式来转换数据，再输出到文件、设备或标准输出。
+
+    > `if=name`，输入文件名，默认为标准输入。
+    >
+    > `of=name`，输出文件名，默认为标准输出。
+    >
+    > `ibs=bytes`，一次读入bytes个字节，即指定一个块大小为bytes个字节，默认大小512。
+    >
+    > `count=blocks`，仅拷贝blocks个块，块大小等于`ibs`指定的字节数。
+    >
+    > `seek=blocks`，从输入文件开头跳过blocks个块后再开始复制。
+    >
+    > `conv=notrunc`，不截断输出文件。
+
+  - `$@`指当前目标，这段代码中指`UCOREIMG`。
+  - 读代码可以明白，首先创建一个大小为10000个块的区域，然后把`bootblock`拷贝过去，再把`kernel`拷贝过去，拷贝在`bootblock`所在块的后面。
+
+- 产生`bootblock`的代码位于`makefile`文件156-168行。
+
+  ```makefile
+  bootfiles = $(call listf_cc,boot)
+  $(foreach f,$(bootfiles),$(call cc_compile,$(f),$(CC),$(CFLAGS) -Os -nostdinc))
+  
+  bootblock = $(call totarget,bootblock)
+  
+  $(bootblock): $(call toobj,$(bootfiles)) | $(call totarget,sign)
+  	@echo + ld $@
+  	$(V)$(LD) $(LDFLAGS) -N -e start -Ttext 0x7C00 $^ -o $(call toobj,bootblock)
+  	@$(OBJDUMP) -S $(call objfile,bootblock) > $(call asmfile,bootblock)
+  	@$(OBJCOPY) -S -O binary $(call objfile,bootblock) $(call outfile,bootblock)
+  	@$(call totarget,sign) $(call outfile,bootblock) $(bootblock)
+  
+  $(call create_target,bootblock)
+  ```
+
+  需要依赖`$(bootfiles)`和`sign`。
+
+  ```shell
+  + cc boot/bootasm.S
+  gcc -Iboot/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Os -nostdinc -c boot/bootasm.S -o obj/boot/bootasm.o
+  + cc boot/bootmain.c
+  gcc -Iboot/ -march=i686 -fno-builtin -fno-PIC -Wall -ggdb -m32 -gstabs -nostdinc  -fno-stack-protector -Ilibs/ -Os -nostdinc -c boot/bootmain.c -o obj/boot/bootmain.o
+  + cc tools/sign.c
+  gcc -Itools/ -g -Wall -O2 -c tools/sign.c -o obj/sign/tools/sign.o
+  gcc -g -Wall -O2 obj/sign/tools/sign.o -o bin/sign
+  + ld bin/bootblock
+  ld -m    elf_i386 -nostdlib -N -e start -Ttext 0x7C00 obj/boot/bootasm.o obj/boot/bootmain.o -o obj/bootblock.o
+  ```
+
+  根据`make V=`命令打印出的结果，可以分析出为生成`bootblock`首先需要生成`bootasm.o`、`bootmain.o`和`sign`，其中前两者即为`$(bootfiles)`，由宏定义批量实现。
+
+  ```makefile
+  bootfiles = $(call listf_cc,boot)
+  $(foreach f,$(bootfiles),$(call cc_compile,$(f),$(CC),$(CFLAGS) -Os -nostdinc))
+  ```
+
+  编译的具体命令为上面代码框中的第2行和第4行，其中一些参数的含义如下：
+
+  > `-march`，指定进行优化的型号，此处是i686。
+  >
+  > `-fno-builtin`，不使用c语言的内建函数（函数重名时使用）。
+  >
+  > `-fno-PIC`，不生成与位置无关的代码(position independent code)。
+  >
+  > `-Wall`，编译后显示所有警告。
+  >
+  > `-ggdb`，为GDB生成更为丰富的调试信息。
+  >
+  > `-m32`，生成适用于32位系统的代码。
+  >
+  > `-gstabs`，以stabs格式生成调试信息，但不包括上一条的GDB调试信息。
+  >
+  > `-nostdinc`，不使用标准库。
+  >
+  > `-fno-stack-protector`，不生成用于检测缓冲区溢出的代码。
+  >
+  > `-Os`，为减小代码大小而进行优化。
+
+  生成`sign`的代码如下。
+
+  ```makefile
+  $(call add_files_host,tools/sign.c,sign,sign)
+  $(call create_target_host,sign,sign)
+  ```
+
+  具体命令见上面代码框第6行和第7行。
+
+  三个依赖文件生成完后，就可以生成`bootblock`，具体命令如下。
+
+  ```shell
+  ld -m    elf_i386 -nostdlib -N -e start -Ttext 0x7C00 obj/boot/bootasm.o obj/boot/bootmain.o -o obj/bootblock.o
+  ```
+
+  其中`ld`是GNU的连接器，将目标文件连接为可执行文件。
+
+  > `-m`，类march操作，模拟i386的链接器。
+  >
+  > `-nostdlib`，不使用标准库。
+  >
+  > `-N`，设置全读写权限。
+  >
+  > `-e`，指定程序的入口。
+  >
+  > `-Ttext`，指定代码段的开始位置。
+
+- 生成`kernel`的代码位于`makefile`文件141-151行。
+
+  ```makefile
+  kernel = $(call totarget,kernel)
+  
+  $(kernel): tools/kernel.ld
+  
+  $(kernel): $(KOBJS)
+  	@echo + ld $@
+  	$(V)$(LD) $(LDFLAGS) -T tools/kernel.ld -o $@ $(KOBJS)
+  	@$(OBJDUMP) -S $@ > $(call asmfile,kernel)
+  	@$(OBJDUMP) -t $@ | $(SED) '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $(call symfile,kernel)
+  
+  $(call create_target,kernel)
+  ```
+
+  `kernel`的依赖文件是一个集合`KOBJS`，而文件具体内容由`KSRCDIR`指定。
+
+  具体命令为。
+
+  ```shell
+  ld -m    elf_i386 -nostdlib -T tools/kernel.ld -o bin/kernel  obj/kern/init/init.o obj/kern/libs/stdio.o obj/kern/libs/readline.o obj/kern/debug/panic.o obj/kern/debug/kdebug.o obj/kern/debug/kmonitor.o obj/kern/driver/clock.o obj/kern/driver/console.o obj/kern/driver/picirq.o obj/kern/driver/intr.o obj/kern/trap/trap.o obj/kern/trap/vectors.o obj/kern/trap/trapentry.o obj/kern/mm/pmm.o  obj/libs/string.o obj/libs/printfmt.o
+  ```
+
+  可以看出，生成`kernel`前，先要用`gcc`编译`kern`目录下所有的`.c`文件，再用连接器将他们连接起来。
+
+- 综上所述，`ucore.img`的生成主要有以下几个步骤：
+  - 编译所有生成`kerenel`所需的文件，并将他们连接从而生成`kernel`。
+  - 编译`bootasm.S`、`bootmain.c`和`sign.c`，并根据`sign`生成`bootblock`
+  - 创建一个大小为10000个块的`ucore.img`，每个块为512字节。将`bootblock`拷贝到第一个块，`kernel`拷贝到第二个块。
+
+#### 符合规范的硬盘主引导扇区的特征
+
+阅读`tools/sign.c`中相关代码。
+
+```c++
+char buf[512]; //定义buf数组
+memset(buf, 0, sizeof(buf)); //初始化置0
+buf[510] = 0x55; //把buf数组最后两位置为0x55AA
+buf[511] = 0xAA;
+FILE *ofp = fopen(argv[2], "wb+");
+size = fwrite(buf, 1, 512, ofp);
+if (size != 512) {
+    fprintf(stderr, "write '%s' error, size is %d.\n", argv[2], size);
+    return -1;
+}
+fclose(ofp);
+printf("build 512 bytes boot sector: '%s' success!\n", argv[2]);
+return 0;
+```
+
+因此可知特征有如下几点
+
+- 磁盘主引导扇区大小为521字节。
+- 磁盘主引导扇区最后两个字节为`0x55AA`
+- [由不超过466字节的启动代码和不超过64字节的硬盘分区表加上两个字节的结束符组成](https://zh.wikipedia.org/wiki/%E4%B8%BB%E5%BC%95%E5%AF%BC%E8%AE%B0%E5%BD%95)，多余的空间为0。
+
+-----
+
+### 练习2：使用`qemu`执行并调试`lab1`中的软件。
+
+#### 从CPU加电后执行的第一条指令开始，单步跟踪BIOS的执行
+
+首先修改`lab1/tools/gdbinit`文件，这是`gdb`的配置文件。我们并没有用到`kernel`中的符号，因此不需要`file bin/kernel`，也不用在`kern_init`处打断点，修改文件为以下内容。
+
+```text
+set architecture i8086
+target remote :1234
+```
+
+然后在`lab1`根目录执行`make debug`，会弹出`qemu`模拟器和`gdb`窗口。
+
+在`gdb`内输入`x $pc`查看当前`$pc`的值，得到如下输出。
+
+```asm
+=> 0xfff0:      add    %al,(%eax)
+```
+
+再输入`x $cs`查看`CS`段寄存器的值。
+
+```asm
+0xf000:      add    %al,(%eax)
+```
+
+因此CPU要执行的第一条指令的地址为`CS:IP=0xffff0`，这条指令是一条长跳转指令，输入`x 0xffff0`查询。
+
+```asm
+0xffff0:     ljmp   $0x3630,$0xf000e05b
+```
+
+这也即为CPU加电后执行的第一条指令。
+
+之后便可以输入`si`进行单步调试。
+
+#### 在初始化位置0x7c00设置实地址断点,测试断点正常
+
+再次修改`gdbinit`文件，加入以下指令。
+
+```text
+b *0x7c00   //在0x7c00处设置断点。此地址是bootloader入口点地址，boot/bootasm.S的start地址处
+c     //continue简称，表示继续执行
+```
+
+再次`make debug`，发现有以下输出，说明断点正常。
+
+```asm
+Breakpoint 1 at 0x7c00
+
+Breakpoint 1, 0x00007c00 in ?? ()
+```
+
+输入`x /10i $pc`查看pc后十条指令。
+
+```asm
+=> 0x7c00:      cli
+   0x7c01:      cld
+   0x7c02:      xor    %eax,%eax
+   0x7c04:      mov    %eax,%ds
+   0x7c06:      mov    %eax,%es
+   0x7c08:      mov    %eax,%ss
+   0x7c0a:      in     $0x64,%al
+   0x7c0c:      test   $0x2,%al
+   0x7c0e:      jne    0x7c0a
+   0x7c10:      mov    $0xd1,%al
+```
+
+说明断点正常。
+
+此时再次查看`CS`的值，得到如下输出：
+
+```assembly
+0x0:    0xf000ff53
+```
+
+说明目前执行的指令地址即为`eip`寄存器中的地址。
+
+#### 从0x7c00开始跟踪代码运行,将单步跟踪反汇编得到的代码与`bootasm.S`和`bootblock.asm`进行比较
+
+`bootasm.S`中部分代码如下：
+
+```assembly
+start:
+.code16                                             # Assemble for 16-bit mode
+    cli                                             # Disable interrupts
+    cld                                             # String operations increment
+
+    # Set up the important data segment registers (DS, ES, SS).
+    xorw %ax, %ax                                   # Segment number zero
+    movw %ax, %ds                                   # -> Data Segment
+    movw %ax, %es                                   # -> Extra Segment
+    movw %ax, %ss                                   # -> Stack Segment
+
+    # Enable A20:
+    #  For backwards compatibility with the earliest PCs, physical
+    #  address line 20 is tied low, so that addresses higher than
+    #  1MB wrap around to zero by default. This code undoes this.
+seta20.1:
+    inb $0x64, %al                                  # Wait for not busy(8042 input buffer empty).
+    testb $0x2, %al
+    jnz seta20.1
+
+    movb $0xd1, %al                                 # 0xd1 -> port 0x64
+    outb %al, $0x64                                 # 0xd1 means: write data to 8042's P2 port
+```
+
+观察可知，与上面打印出的十行代码基本一致。
+
+`bootblock.asm`中部分代码如下：
+
+```assembly
+start:
+.code16                                             # Assemble for 16-bit mode
+    cli                                             # Disable interrupts
+    7c00:	fa                   	cli    
+    cld                                             # String operations increment
+    7c01:	fc                   	cld    
+
+    # Set up the important data segment registers (DS, ES, SS).
+    xorw %ax, %ax                                   # Segment number zero
+    7c02:	31 c0                	xor    %eax,%eax
+    movw %ax, %ds                                   # -> Data Segment
+    7c04:	8e d8                	mov    %eax,%ds
+    movw %ax, %es                                   # -> Extra Segment
+    7c06:	8e c0                	mov    %eax,%es
+    movw %ax, %ss                                   # -> Stack Segment
+    7c08:	8e d0                	mov    %eax,%ss
+
+00007c0a <seta20.1>:
+    # Enable A20:
+    #  For backwards compatibility with the earliest PCs, physical
+    #  address line 20 is tied low, so that addresses higher than
+    #  1MB wrap around to zero by default. This code undoes this.
+seta20.1:
+    inb $0x64, %al                                  # Wait for not busy(8042 input buffer empty).
+    7c0a:	e4 64                	in     $0x64,%al
+    testb $0x2, %al
+    7c0c:	a8 02                	test   $0x2,%al
+    jnz seta20.1
+    7c0e:	75 fa                	jne    7c0a <seta20.1>
+```
+
+观察可知，与上面打印出的十行代码基本一致。
+
+后面的代码也基本一致。
+
+综上所述，三者代码基本一致。
+
+#### 自己找一个`bootloader`或内核中的代码位置，设置断点并进行测试
+
+再次修改`gdbinit`文件，修改断点地址。例如修改为`0x7c4a`。
+
+再次运行`make debug`，可以看到如下输出。
+
+```text
+Breakpoint 1 at 0x7c4a
+
+Breakpoint 1, 0x00007c4a in ?? ()
+```
+
+表明断点设置正常，可以通过`si`进行单步调试。
+
+-----
+
+### 练习3：分析`bootloader`进入保护模式的过程。
+
