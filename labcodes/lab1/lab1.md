@@ -406,3 +406,108 @@ Breakpoint 1, 0x00007c4a in ?? ()
 
 ### 练习3：分析`bootloader`进入保护模式的过程。
 
+- 首先阅读`lab1/boot/bootasm.S`代码。
+
+  ```assembly
+  start:
+  .code16                                             # Assemble for 16-bit mode
+      cli                                             # Disable interrupts，屏蔽中断
+      cld                                             # String operations increment，清空方向标志
+  
+      # Set up the important data segment registers (DS, ES, SS).
+      xorw %ax, %ax                                   # Segment number zero
+      movw %ax, %ds                                   # -> Data Segment
+      movw %ax, %es                                   # -> Extra Segment
+      movw %ax, %ss                                   # -> Stack Segment
+  ```
+
+  注意此时代码为16位代码。`bootloader`首先会关闭中断，并将各个寄存器置0。
+
+#### 为何开启A20，以及如何开启A20
+
+Intel早期的8086 CPU拥有1MB内存空间，存在“回卷”机制，用于避免寻址到超过1MB的内存发生异常。但后续发布的CPU内存空间超过1MB，但由于“回卷”机制，无法访问到超过1MB以上的内存。为了保持完全的向下兼容性，因此设计了`A20 Gate`。一开始A20地址线控制总是被屏蔽（为0），直到系统软件通过一定I/O操作打开它。简单的说，初始时A20为0，只能访问1MB以内的内存（大于1MB的地址则取余数），将其置为1后，才可以访问4GB内存。
+
+A20地址位由键盘控制器8042控制，8042有两个I/O端口：0x60和0x64。
+
+打开流程:
+
+- 等待8042 Input buffer为空
+- 发送Write 8042 Output Port （P2）命令到8042 Input buffer
+- 等待8042 Input buffer为空
+- 将8042 Output Port（P2）得到字节的第2位置1，然后写入8042 Input buffer
+
+`bootasm.S`中代码如下：
+
+```assembly
+seta20.1:
+    inb $0x64, %al                                  # 等待8042键盘控制器闲置
+    testb $0x2, %al									# 判断输入缓存是否为空,al第二位是"input register (60h/64h) 有数据"
+    jnz seta20.1									# 如果是1则循环等待
+
+    movb $0xd1, %al                                 # 向0x64发送0xd1命令
+    outb %al, $0x64                                 # 0xd1 means: write data to 8042's P2 port
+
+seta20.2:
+    inb $0x64, %al                                  # 同上
+    testb $0x2, %al
+    jnz seta20.2
+
+    movb $0xdf, %al                                 # 向0x60发送0xdf命令
+    outb %al, $0x60                                 # 0xdf = 11011111, means set P2's A20 bit(the 1 bit) to 1，成功打开A20
+```
+
+#### 如何初始化`GDT`表
+
+首先载入`GDT`表。
+
+```assembly
+lgdt gdtdesc
+```
+
+再进入保护模式。
+
+```assembly
+movl %cr0, %eax			# 加载cr0到eax
+orl $CR0_PE_ON, %eax	# 将eax的第0位置1
+						# $CR0_PE_ON = 1
+movl %eax, %cr0			# 将cr0的第0位置1
+```
+
+`cr0`寄存器是一个控制寄存器，其中第0位是PE(Protection Enabled)位。当其值为1时，CPU进入保护模式，同时启动段机制；当其值为0时，则为实地址模式。
+
+之后通过长跳转到32位代码段并更新CS和EIP。
+
+```assembly
+ljmp $PROT_MODE_CSEG, $protcseg						# $PROT_MODE_CSEG=0x8
+.code32                                             # Assemble for 32-bit mode
+protcseg:
+```
+
+之后设置段寄存器，建立堆栈。
+
+```assembly
+# Set up the protected-mode data segment registers
+movw $PROT_MODE_DSEG, %ax                       # Our data segment selector
+movw %ax, %ds                                   # -> DS: Data Segment
+movw %ax, %es                                   # -> ES: Extra Segment
+movw %ax, %fs                                   # -> FS
+movw %ax, %gs                                   # -> GS
+movw %ax, %ss                                   # -> SS: Stack Segment
+
+# Set up the stack pointer and call into C. The stack region is from 0--start(0x7c00)
+movl $0x0, %ebp
+movl $start, %esp
+```
+
+最后成功进入保护模式，进入boot方法。
+
+```assembly
+call bootmain
+```
+
+#### 如何使能和进入保护模式
+
+将`cr0.PE`置1。
+
+-----
+
