@@ -511,3 +511,202 @@ call bootmain
 
 -----
 
+### 练习4：分析`bootloader`加载ELF格式的OS的过程。
+
+通过对之前`bootmain.S`的分析，我们知道系统上电后启动BIOS，加载`bootloader`开启保护模式并建立堆栈，因此便可以继续执行C代码，会执行`bootmain.c`加载ELF格式的OS kernel。由于OS存储在磁盘之中，因此需要先读取磁盘再加载。
+
+#### `bootloader`如何读取硬盘扇区的
+
+读取磁盘扇区主要有以下四步：
+
+- 等待磁盘准备好
+- 发出读取扇区的命令
+- 等待磁盘准备好
+- 把磁盘扇区数据读到指定内存中
+
+```c
+/* readsect - read a single sector at @secno into @dst */
+static void
+readsect(void *dst, uint32_t secno) {
+    // wait for disk to be ready
+    waitdisk();
+    
+    outb(0x1F2, 1);                         // count = 1
+    outb(0x1F3, secno & 0xFF);
+    outb(0x1F4, (secno >> 8) & 0xFF);
+    outb(0x1F5, (secno >> 16) & 0xFF);
+    outb(0x1F6, ((secno >> 24) & 0xF) | 0xE0);
+    outb(0x1F7, 0x20);                      // cmd 0x20 - read sectors
+
+    // wait for disk to be ready
+    waitdisk();
+
+    // read a sector，
+    insl(0x1F0, dst, SECTSIZE / 4);
+}
+```
+
+首先执行`waitdisk`，等待磁盘不忙。再向`0x1f2`写入要读取的扇区数，之后将LBA的参数分别写入，再向`0x1f7`写入读信号`0x20`，最后再次等待磁盘闲置后，读取所要读取的扇区。
+
+写入LBA参数时，在`0x1f3`、`0x1f4`和`0x1f5`每次写入8位，在`0x1f6`中，secno只写入低四位，而高四位中，第4位为0，表明是主盘；第5位和第7位必须为1；第6位为1，表明是LBA模式。因此需要与`0xe0`做或操作。
+
+最后调用`insl()`从`0x1f0`中读取扇区到`dst`处，注意读取是以DWORD为单位，因此给参数为`SECTSIZE / 4`。
+
+#### `bootloader`是如何加载ELF格式的OS
+
+``` c
+/* bootmain - the entry of bootloader */
+void
+bootmain(void) {
+    // read the 1st page off disk
+    readseg((uintptr_t)ELFHDR, SECTSIZE * 8, 0);
+
+    // is this a valid ELF?
+    if (ELFHDR->e_magic != ELF_MAGIC) {
+        goto bad;
+    }
+
+    struct proghdr *ph, *eph;
+
+    // load each program segment (ignores ph flags)
+    ph = (struct proghdr *)((uintptr_t)ELFHDR + ELFHDR->e_phoff);
+    eph = ph + ELFHDR->e_phnum;
+    for (; ph < eph; ph ++) {
+        readseg(ph->p_va & 0xFFFFFF, ph->p_memsz, ph->p_offset);
+    }
+
+    // call the entry point from the ELF header
+    // note: does not return
+    ((void (*)(void))(ELFHDR->e_entry & 0xFFFFFF))();
+
+bad:
+    outw(0x8A00, 0x8A00);
+    outw(0x8A00, 0x8E00);
+
+    /* do nothing */
+    while (1);
+}
+```
+
+首先通过`readseg()`函数确定OS所在的ELF文件所处的磁盘扇区并通过`readsect()`读取磁盘扇区，把ELF文件头读取到内存中的`0x10000`处。
+
+注意在`readseg()`函数中的细节：
+
+- `va`可能不在一个扇区头处，因此要调整到扇区开始处。
+- `secno`要加一因为通过之前实验我们知道，第一个扇区存储的是`bootblock`，而`OS kernel`从第二个扇区开始存储。
+
+之后检验`ELFHDR`中的`e_magic`，从而确保文件正确。再根据`ELFHDR`中的`phoff`读取出`program header`表的位置偏移，从`phnum`中读取数目。之后便一一读取至内存的对应位置。读取完毕后，调用`ELF`文件的入口点处的函数，进入OS程序，完成系统启动。
+
+由于静态代码分析已完全了解启动过程，便不再用`qemu`进行单步调试跟踪。
+
+### 练习5：实现函数调用堆栈跟踪函数。
+
+这一个练习只需要完成`kern/debug/kdebug.c`中的`print_stackframe()`函数。这个函数的主要作用是打印出当前函数栈中的嵌套调用关系（类似于调试报错时的栈帧信息打印）。
+
+由于栈帧的特殊结构，我们可以通过不断读取`ebp`的值来覆盖当前`ebp`从而实现栈帧切换。栈帧中存储着函数的返回地址、参数等，而只要知道`ebp`的值，便可以通过地址来读取到参数和`eip`等信息。
+
+简易的栈模型如下：
+
+```text
+ss:[ebp+12]==>  参数2
+ss:[ebp+8] ==>  参数1
+ss:[ebp+4] ==>  返回地址
+ss:[ebp]   ==>  上一层[ebp]
+ss:[ebp-4] ==>  局部变量1
+ss:[ebp-8] ==>  局部变量2
+```
+
+为了方便我们实现，这个文件中提供了以下几个函数来辅助我们完成：
+
+- `read_ebp()`：读取当前`ebp`的值。
+- `read_eip()`：读取当前`eip`的值。
+- `print_debuginfo()`：打印出函数的名称文件行号等信息。
+
+在文件中给了丰富的提示代码，我们可以照着提示去一步步的实现。下面给出代码。
+
+```c
+void print_stackframe(void)
+{
+    /* LAB1 YOUR CODE : STEP 1 */
+    // (1) call read_ebp() to get the value of ebp. the type is (uint32_t);
+    uint32_t ebp = read_ebp();
+    // (2) call read_eip() to get the value of eip. the type is (uint32_t);
+    uint32_t eip = read_eip();
+    // (3) from 0 .. STACKFRAME_DEPTH
+    for (int i = 0; i < STACKFRAME_DEPTH && ebp != 0; i++)
+    {
+        // (3.1) printf value of ebp, eip
+        cprintf("ebp:0x%08x eip:0x%08x args:", ebp, eip);
+        for (int j = 0; j < 4; j++)
+        {
+            // (3.2)(uint32_t) calling arguments[0..4] = the contents in address(uint32_t) ebp + 2 [0..4] 
+            uint32_t arg = *((uint32_t *)ebp + 2 + j);
+            cprintf("0x%08x ", arg);
+        }
+        // (3.3) cprintf("\n");
+        cprintf("\n");
+        // (3.4) call print_debuginfo(eip-1) to print the C calling function name and line number, etc.
+        print_debuginfo(eip - 1);
+        // (3.5) popup a calling stackframe
+        //    *NOTICE : the calling funciton's return addr eip  = ss:[ebp+4]
+        //                  *the calling funciton's ebp = ss:[ebp] eip = *((uint32_t *)ebp + 1);
+        ebp = *((uint32_t *)ebp);
+    }
+}
+
+```
+
+运行`make qemu`得到如下输出。
+
+```asm
++ cc kern/debug/kdebug.c
++ ld bin/kernel
+记录了10000+0 的读入
+记录了10000+0 的写出
+5120000字节（5.1 MB，4.9 MiB）已复制，0.0636968 s，80.4 MB/s
+记录了1+0 的读入
+记录了1+0 的写出
+512字节已复制，0.00268164 s，191 kB/s
+记录了154+1 的读入
+记录了154+1 的写出
+78912字节（79 kB，77 KiB）已复制，0.00359308 s，22.0 MB/s
+WARNING: Image format was not specified for 'bin/ucore.img' and probing guessed raw.
+         Automatically detecting the format is dangerous for raw images, write operations on block 0 will be restricted.
+         Specify the 'raw' format explicitly to remove the restrictions.
+(THU.CST) os is loading ...
+
+Special kernel symbols:
+  entry  0x00100000 (phys)
+  etext  0x0010341d (phys)
+  edata  0x0010fa16 (phys)
+  end    0x00110d20 (phys)
+Kernel executable memory footprint: 68KB
+ebp:0x00007b28 eip:0x00100ab3 args:0x00010094 0x00010094 0x00007b58 0x00100096 
+    kern/debug/kdebug.c:334: print_stackframe+25
+ebp:0x00007b38 eip:0x00100db5 args:0x00000000 0x00000000 0x00000000 0x00007ba8 
+    kern/debug/kmonitor.c:125: mon_backtrace+14
+ebp:0x00007b58 eip:0x00100096 args:0x00000000 0x00007b80 0xffff0000 0x00007b84 
+    kern/init/init.c:48: grade_backtrace2+37
+ebp:0x00007b78 eip:0x001000c4 args:0x00000000 0xffff0000 0x00007ba4 0x00000029 
+    kern/init/init.c:53: grade_backtrace1+42
+ebp:0x00007b98 eip:0x001000e7 args:0x00000000 0x00100000 0xffff0000 0x0000001d 
+    kern/init/init.c:58: grade_backtrace0+27
+ebp:0x00007bb8 eip:0x00100111 args:0x0010343c 0x00103420 0x0000130a 0x00000000 
+    kern/init/init.c:63: grade_backtrace+38
+ebp:0x00007be8 eip:0x00100055 args:0x00000000 0x00000000 0x00000000 0x00007c4f 
+    kern/init/init.c:28: kern_init+84
+ebp:0x00007bf8 eip:0x00007d74 args:0xc031fcfa 0xc08ed88e 0x64e4d08e 0xfa7502a8 
+    <unknow>: -- 0x00007d73 --
+```
+
+可见满足输出要求。
+
+写代码时遇到的几个坑：
+
+- 没有判断`ebp!=0`导致一直到栈低还未停止，因此加入循环控制条件`ebp!=0`。
+- 一开始错误理解了`ebp`，`ebp`寄存器中存储的是栈中的地址，指向的空间内存储的是上一层的`ebp`。因此访问`ebp`地址附近的栈空间，只需把其类型转换为`uint32_t *`，再移动这个指针就可以得到参数和返回地址。
+
+-----
+
+### 练习6：完善中断初始化和处理
+
