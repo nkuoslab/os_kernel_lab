@@ -710,3 +710,145 @@ ebp:0x00007bf8 eip:0x00007d74 args:0xc031fcfa 0xc08ed88e 0x64e4d08e 0xfa7502a8
 
 ### 练习6：完善中断初始化和处理
 
+#### 中断描述符表（也可简称为保护模式下的中断向量表）中一个表项占多少字节？其中哪几位代表中断处理代码的入口？
+
+中断描述符表中一个表项叫做一个门描述符，占8个字节，其一般格式如下：
+
+```text
+63                               48 47      46  44   42    39             34   32 
++-------------------------------------------------------------------------------+
+|                                  |       |  D  |   |     |      |   |   |     |
+|       Offset 31..16              |   P   |  P  | 0 |Type |0 0 0 | 0 | 0 | IST |
+|                                  |       |  L  |   |     |      |   |   |     |
+ -------------------------------------------------------------------------------+
+31                                   16 15                                      0
++-------------------------------------------------------------------------------+
+|                                      |                                        |
+|          Segment Selector            |                 Offset 15..0           |
+|                                      |                                        |
++-------------------------------------------------------------------------------+
+```
+
+其中：
+
+- `Selector` - 目标代码段的段选择子；
+- `Offset` - 处理程序入口点的偏移量；
+- `DPL` - 描述符权限级别；
+- `P` - 当前段标志；
+- `IST` - 中断堆栈表；
+- `TYPE` - 本地描述符表（LDT）段描述符，任务状态段（TSS）描述符，调用门描述符，中断门描述符，陷阱门描述符或任务门描述符之一。
+
+因此第0-15位和48-63位拼接起来即为中断处理代码的入口地址。
+
+#### 请编程完善`kern/trap/trap.c`中对中断向量表进行初始化的函数`idt_init`。
+
+在`idt_init`函数中，依次对所有中断入口进行初始化。使用`mmu.h`中的`SETGATE`宏，填充`idt`数组内容。每个中断的入口由`tools/vectors.c`生成，使用`trap.c`中声明的`vectors`数组即可。
+
+-----
+
+```c
+void idt_init(void)
+{
+    /* LAB1 YOUR CODE : STEP 2 */
+    /* (1) Where are the entry addrs of each Interrupt Service Routine (ISR)?
+      *     All ISR's entry addrs are stored in __vectors. where is uintptr_t __vectors[] ?
+      *     __vectors[] is in kern/trap/vector.S which is produced by tools/vector.c
+      *     (try "make" command in lab1, then you will find vector.S in kern/trap DIR)
+      *     You can use  "extern uintptr_t __vectors[];" to define this extern variable which will be used later.
+      * (2) Now you should setup the entries of ISR in Interrupt Description Table (IDT).
+      *     Can you see idt[256] in this file? Yes, it's IDT! you can use SETGATE macro to setup each item of IDT
+      * (3) After setup the contents of IDT, you will let CPU know where is the IDT by using 'lidt' instruction.
+      *     You don't know the meaning of this instruction? just google it! and check the libs/x86.h to know more.
+      *     Notice: the argument of lidt is idt_pd. try to find it!
+      */
+    extern uintptr_t __vectors[];
+    for (int i = 0; i < 256; i++)
+    {
+        SETGATE(idt[i], 0, GD_KTEXT, __vectors[i], DPL_KERNEL);
+    }
+    SETGATE(idt[T_SWITCH_TOU], 0, GD_KTEXT, __vectors[T_SWITCH_TOU], DPL_USER);
+    lidt(&idt_pd);
+}
+```
+
+这一节代码注释也很详细，首先声明保存所有入口地址的数组`__vectors[]`，再对`idt[]`数组中每一项用`SETGATE`进行初始化，最后通过指令`lidt`让CPU知道IDT数组已经初始化完毕。
+
+下面具体说明`SETGATE`宏。
+
+```c
+#define SETGATE(gate, istrap, sel, off, dpl) {}
+/* *
+ * Set up a normal interrupt/trap gate descriptor
+ *   - istrap: 1 for a trap (= exception) gate, 0 for an interrupt gate
+ *   - sel: Code segment selector for interrupt/trap handler
+ *   - off: Offset in code segment for interrupt/trap handler
+ *   - dpl: Descriptor Privilege Level - the privilege level required
+ *          for software to invoke this interrupt/trap gate explicitly
+ *          using an int instruction.
+ * */
+```
+
+- 第一个参数，门描述符，显然为`idt[i]`
+- 第二个参数，表明门的类型是`Interrupt Gate`还是`Trap Gate`，题目中描述使用中断门，因此为0
+- 第三个参数，表明代码段选择子，表示用于中断/陷阱处理程序的代码段选择器，采用内核代码段，即`GD_KTEXT`
+- 第四个参数，表明偏移量，显然为`__vectors[i]`
+- 第五个参数，表明权限等级描述，题目描述为0，即`DPL_KERNEL`
+
+由于题目中说，实现特权级3到特权级0的切换的中断门描述符为3，因此需要单独设置一个。
+
+在`trap.h`中关于`processor-defined`中有
+
+```c
+/* *
+ * These are arbitrarily chosen, but with care not to overlap
+ * processor defined exceptions or interrupt vectors.
+ * */
+#define T_SWITCH_TOU                120    // user/kernel switch
+#define T_SWITCH_TOK                121    // user/kernel switch
+```
+
+因此，随便选择一个即可。
+
+#### 请编程完善`trap.c`中的中断处理函数`trap`，在对时钟中断进行处理的部分填写`trap`函数中处理时钟中断的部分，使操作系统每遇到100次时钟中断后，调用`print_ticks`子程序，向屏幕上打印一行文字”100 ticks”
+
+查看`trap()`函数。
+
+```c
+void trap(struct trapframe *tf)
+{
+    // dispatch based on what type of trap occurred
+    trap_dispatch(tf);
+}
+```
+
+再查看`trap_dispatch()`函数。
+
+这个代码非常简单，给的提示也很充足。
+
+```c
+switch (tf->tf_trapno)
+{
+    case IRQ_OFFSET + IRQ_TIMER:
+        /* LAB1 YOUR CODE : STEP 3 */
+        /* handle the timer interrupt */
+        /* (1) After a timer interrupt, you should record this event using a global variable (increase it), such as ticks in kern/driver/clock.c
+         * (2) Every TICK_NUM cycle, you can print some info using a funciton, such as print_ticks().
+         * (3) Too Simple? Yes, I think so!
+         */
+        ticks++;
+        if(ticks % TICK_NUM == 0){
+            print_ticks();
+        }
+        break;
+}
+```
+
+完成后，再次运行`make qemu`，即可看到下图，每隔1s打印一次`100 ticks`，并会显示出键盘输入的字母。
+
+[![6vaSB9.png](https://z3.ax1x.com/2021/03/26/6vaSB9.png)](https://imgtu.com/i/6vaSB9)
+
+-----
+
+### 挑战1：
+
+扩展proj4,增加`syscall`功能，即增加一用户态函数（可执行一特定系统调用：获得时钟计数值），当内核初始完毕后，可从内核态返回到用户态的函数，而用户态的函数又通过系统调用得到内核态的服务。
