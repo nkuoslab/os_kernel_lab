@@ -341,7 +341,7 @@ void print_stackframe(void)
         cprintf("ebp:0x%08x eip:0x%08x args:", ebp, eip);
         for (int j = 0; j < 4; j++)
         {
-            // (3.2)(uint32_t) calling arguments[0..4] = the contents in address(uint32_t) ebp + 2 [0..4] 
+            // (3.2)(uint32_t) calling arguments[0..4] = the contents in address(uint32_t) ebp + 2 [0..4]
             uint32_t arg = *((uint32_t *)ebp + 2 + j);
             cprintf("0x%08x ", arg);
         }
@@ -351,7 +351,8 @@ void print_stackframe(void)
         print_debuginfo(eip - 1);
         // (3.5) popup a calling stackframe
         //    *NOTICE : the calling funciton's return addr eip  = ss:[ebp+4]
-        //                  *the calling funciton's ebp = ss:[ebp] eip = *((uint32_t *)ebp + 1);
+        //                  *the calling funciton's ebp = ss:[ebp]
+        eip = *((uint32_t *)ebp + 1);
         ebp = *((uint32_t *)ebp);
     }
 }
