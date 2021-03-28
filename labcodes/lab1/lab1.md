@@ -234,7 +234,7 @@ return 0;
 
 因此可知特征有如下几点
 
-- 磁盘主引导扇区大小为521字节。
+- 磁盘主引导扇区大小为512字节。
 - 磁盘主引导扇区最后两个字节为`0x55AA`
 - [由不超过466字节的启动代码和不超过64字节的硬盘分区表加上两个字节的结束符组成](https://zh.wikipedia.org/wiki/%E4%B8%BB%E5%BC%95%E5%AF%BC%E8%AE%B0%E5%BD%95)，多余的空间为0。
 
@@ -599,6 +599,8 @@ bad:
 
 由于静态代码分析已完全了解启动过程，便不再用`qemu`进行单步调试跟踪。
 
+-----
+
 ### 练习5：实现函数调用堆栈跟踪函数。
 
 这一个练习只需要完成`kern/debug/kdebug.c`中的`print_stackframe()`函数。这个函数的主要作用是打印出当前函数栈中的嵌套调用关系（类似于调试报错时的栈帧信息打印）。
@@ -703,7 +705,7 @@ ebp:0x00007bf8 eip:0x00007d74 args:0xc031fcfa 0xc08ed88e 0x64e4d08e 0xfa7502a8
 
 写代码时遇到的几个坑：
 
-- 没有判断`ebp!=0`导致一直到栈低还未停止，因此加入循环控制条件`ebp!=0`。
+- 没有判断`ebp!=0`导致一直到栈底还未停止，因此加入循环控制条件`ebp!=0`。
 - 一开始错误理解了`ebp`，`ebp`寄存器中存储的是栈中的地址，指向的空间内存储的是上一层的`ebp`。因此访问`ebp`地址附近的栈空间，只需把其类型转换为`uint32_t *`，再移动这个指针就可以得到参数和返回地址。
 
 -----
@@ -766,7 +768,7 @@ void idt_init(void)
     {
         SETGATE(idt[i], 0, GD_KTEXT, __vectors[i], DPL_KERNEL);
     }
-    SETGATE(idt[T_SWITCH_TOU], 0, GD_KTEXT, __vectors[T_SWITCH_TOU], DPL_USER);
+    SETGATE(idt[T_SWITCH_TOK], 0, GD_KTEXT, __vectors[T_SWITCH_TOK], DPL_USER);
     lidt(&idt_pd);
 }
 ```
@@ -807,7 +809,7 @@ void idt_init(void)
 #define T_SWITCH_TOK                121    // user/kernel switch
 ```
 
-因此，随便选择一个即可。
+因此选择`To Kernel`，即`T_SWITCH_TOK`。
 
 #### 请编程完善`trap.c`中的中断处理函数`trap`，在对时钟中断进行处理的部分填写`trap`函数中处理时钟中断的部分，使操作系统每遇到100次时钟中断后，调用`print_ticks`子程序，向屏幕上打印一行文字”100 ticks”
 
@@ -849,6 +851,3 @@ switch (tf->tf_trapno)
 
 -----
 
-### 挑战1：
-
-扩展proj4,增加`syscall`功能，即增加一用户态函数（可执行一特定系统调用：获得时钟计数值），当内核初始完毕后，可从内核态返回到用户态的函数，而用户态的函数又通过系统调用得到内核态的服务。
