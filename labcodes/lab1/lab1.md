@@ -209,7 +209,7 @@
 
 - 综上所述，`ucore.img`的生成主要有以下几个步骤：
   - 编译所有生成`kerenel`所需的文件，并将他们连接从而生成`kernel`。
-  - 编译`bootasm.S`、`bootmain.c`和`sign.c`，并根据`sign`生成`bootblock`
+  - 编译`bootasm.S`、`bootmain.c`和`sign.c`，并根据`sign`生成`bootblock`。
   - 创建一个大小为10000个块的`ucore.img`，每个块为512字节。将`bootblock`拷贝到第一个块，`kernel`拷贝到第二个块。
 
 #### 符合规范的硬盘主引导扇区的特征
@@ -555,6 +555,28 @@ readsect(void *dst, uint32_t secno) {
 #### `bootloader`是如何加载ELF格式的OS
 
 ``` c
+/* *
+ * readseg - read @count bytes at @offset from kernel into virtual address @va,
+ * might copy more than asked.
+ * */
+static void
+readseg(uintptr_t va, uint32_t count, uint32_t offset) {
+    uintptr_t end_va = va + count;
+
+    // round down to sector boundary
+    va -= offset % SECTSIZE;
+
+    // translate from bytes to sectors; kernel starts at sector 1
+    uint32_t secno = (offset / SECTSIZE) + 1;
+
+    // If this is too slow, we could read lots of sectors at a time.
+    // We'd write more to memory than asked, but it doesn't matter --
+    // we load in increasing order.
+    for (; va < end_va; va += SECTSIZE, secno ++) {
+        readsect((void *)va, secno);
+    }
+}
+
 /* bootmain - the entry of bootloader */
 void
 bootmain(void) {
@@ -573,7 +595,7 @@ bootmain(void) {
     eph = ph + ELFHDR->e_phnum;
     for (; ph < eph; ph ++) {
         readseg(ph->p_va & 0xFFFFFF, ph->p_memsz, ph->p_offset);
-    }
+    }//这里为什么只取24位不太懂。
 
     // call the entry point from the ELF header
     // note: does not return
@@ -588,7 +610,9 @@ bad:
 }
 ```
 
-首先通过`readseg()`函数确定OS所在的ELF文件所处的磁盘扇区并通过`readsect()`读取磁盘扇区，把ELF文件头读取到内存中的`0x10000`处。
+先明确一下`readseg()`和`readsect()`。后者是通过扇区号读具体的磁盘扇区到指定的内存地址，而前者则是在其上封装出来的，读出`offset`处`count`个大小的文件到`va`处，其中对于具体磁盘扇区的读取是调用`readseg()`实现的。
+
+通过`readseg()`函数确定OS所在的ELF文件所处的磁盘扇区并通过`readsect()`读取磁盘扇区，把ELF文件头读取到内存中的`0x10000`处。
 
 注意在`readseg()`函数中的细节：
 
@@ -652,6 +676,7 @@ void print_stackframe(void)
         // (3.5) popup a calling stackframe
         //    *NOTICE : the calling funciton's return addr eip  = ss:[ebp+4]
         //                  *the calling funciton's ebp = ss:[ebp] eip = *((uint32_t *)ebp + 1);
+        eip = *((uint32_t *)ebp + 1);
         ebp = *((uint32_t *)ebp);
     }
 }
