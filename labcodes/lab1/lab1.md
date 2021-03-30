@@ -876,3 +876,94 @@ switch (tf->tf_trapno)
 
 -----
 
+### 挑战1：
+
+扩展proj4,增加`syscall`功能，即增加一用户态函数（可执行一特定系统调用：获得时钟计数值），当内核初始完毕后，可从内核态返回到用户态的函数，而用户态的函数又通过系统调用得到内核态的服务。
+
+由于要求用中断实现，因此先再看看中断的执行过程。
+
+查看`vector.S`，这里是生成中断处理的入口点，所有的中断都先向栈中压入（`error_code`和）中断号，然后跳转到`__alltraps`。
+
+```assembly
+vector0:
+  pushl $0
+  pushl $0
+  jmp __alltraps
+.globl vector1
+vector1:
+  pushl $0
+  pushl $1
+  jmp __alltraps
+```
+
+在`__alltraps`函数中，它会保存一些寄存器，然后就又跳转到了`trap`处。在这之前通过`esp`来传递一个参数`trapframe`，里面存储的是就是刚压入的各种寄存器的状态。`trap`函数中又会调用`trap_dispatch`，然后再通过`tf->trapno`，根据不同的中断种类执行不同的处理。**处理完成后，再取出`trapframe`中保存的各寄存器状态进行恢复。**
+
+因此，特权级的切换就可以通过修改`trapframe`中的`CS`寄存器，将其修改为另一特权级的地址即可。同时也要修改`DS`、`ES`、和`SS`的特权级。
+
+（后来查询资料得知，也要修改IO操作的权限。这个定义在`EFLAGS`中。）
+
+首先补全`case T_SWITCH_TOK`和`case T_SWITCH_TOU`中的代码。
+
+```c++
+case T_SWITCH_TOK:
+    if (tf->tf_cs != KERNEL_CS)
+    {
+        tf->tf_cs = KERNEL_CS;
+        tf->tf_ds = tf->tf_es = tf->tf_ss = KERNEL_DS;
+        tf->tf_eflags &= ~FL_IOPL_MASK; //I/O Privilege Level bitmask   12 13 bit
+    }
+    break;
+
+case T_SWITCH_TOU:
+    if (tf->tf_cs != USER_CS)
+    {
+        tf->tf_cs = USER_CS;
+        tf->tf_ds = tf->tf_es = tf->tf_ss = USER_DS;
+        tf->tf_eflags |= FL_IOPL_MASK;
+    }
+    break;
+```
+
+再补全`init.c`中的两个函数。
+
+中断的调用用`int`指令，返回用`iret`指令。
+
+调用`int`指令，从用户态切换到内核态，会发生栈的切换，因此除了压入`Error Code`、`EIP`、`CS`、`EFLAGS`之外，还需要压入`ESP` 和`SS`。而从内核态到用户态则无需手动压入`ESP`和`SS`。
+
+调用`iret`指令，从中断例程返回到用户态时，会弹出`SS`和`ESP`。
+
+这就造成了一个问题，当从内核态切换到用户态时，调用中断时不压入`ESP`和`SS`，但中断返回时却要弹出`ESP`和`SS`。因此为了防止弹出不该弹出的寄存器，调用中断前要将`ESP`减8，中断返回后还要手动恢复`ESP`。
+
+因此首先补全`lab1_switch_to_user`和`lab1_switch_to_kernel`两个函数，在切换到用户态前先修改`esp`的值。
+
+```c++
+static void switch_to_user(void){
+    asm volatile(
+    	"sub $0x8, %%esp \n"
+    	"int %0 \n"
+    	"movl %%ebp, %%esp\n"
+    	:
+    	: "i"(T_SWITCH_TOU)
+    );
+}
+
+static void switch_to_kernel(void){
+    asm volatile(
+    	"int %0 \n"
+    	"movl %%ebp, %%esp\n"
+    	:
+    	: "i"(T_SWITCH_TOK)
+    );
+}
+```
+
+最后再取消`init.c`中的`lab1_switch_test();`注释即可。
+
+`make grade`跑分测试，得到以下结果。
+
+[![cFhCCj.png](https://z3.ax1x.com/2021/03/30/cFhCCj.png)](https://imgtu.com/i/cFhCCj)
+
+挑战1 完成。
+
+-----
+
