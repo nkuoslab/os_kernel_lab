@@ -59,6 +59,17 @@
   'obj/bootblock.out' size: 496 bytes
   build 512 bytes boot sector: 'bin/bootblock' success!
   dd if=/dev/zero of=bin/ucore.img count=10000
+  记录了10000+0 的读入
+  记录了10000+0 的写出
+  5120000字节（5.1 MB，4.9 MiB）已复制，0.0635582 s，80.6 MB/s
+  dd if=bin/bootblock of=bin/ucore.img conv=notrunc
+  记录了1+0 的读入
+  记录了1+0 的写出
+  512字节已复制，0.000192961 s，2.7 MB/s
+  dd if=bin/kernel of=bin/ucore.img seek=1 conv=notrunc
+  记录了154+1 的读入
+  记录了154+1 的写出
+  78944字节（79 kB，77 KiB）已复制，0.000509954 s，155 MB/s
   ```
   
 - 然后分析`makefile`。`ucore.img`产生位于`makefile`文件178-186行。其产生需要两个前置条件，`kernel`和`bootblock`
@@ -937,7 +948,7 @@ case T_SWITCH_TOU:
 因此首先补全`lab1_switch_to_user`和`lab1_switch_to_kernel`两个函数，在切换到用户态前先修改`esp`的值。
 
 ```c++
-static void switch_to_user(void){
+static void lab1_switch_to_user(void){
     asm volatile(
     	"sub $0x8, %%esp \n"
     	"int %0 \n"
@@ -947,7 +958,7 @@ static void switch_to_user(void){
     );
 }
 
-static void switch_to_kernel(void){
+static void lab1_switch_to_kernel(void){
     asm volatile(
     	"int %0 \n"
     	"movl %%ebp, %%esp\n"
@@ -967,3 +978,37 @@ static void switch_to_kernel(void){
 
 -----
 
+### 挑战2：
+
+用键盘实现用户模式内核模式切换。具体目标是：“键盘输入3时切换到用户模式，键盘输入0时切换到内核模式”。 基本思路是借鉴软中断(`syscall`功能)的代码，并且把`trap.c`中软中断处理的设置语句拿过来。
+
+挑战2想让我们用键盘来控制模式的切换，简单考虑就在处理键盘输入的中断中增加对于输入字符的判断，如果是3，就执行下上一个挑战中写好的`lab1_switch_to_user()`，如果是0，就执行下上一个挑战中的`lab1_seitch_to_kernel()`。
+
+然后可以使用`print_trapframe(tf)`打印一下寄存器的信息。
+
+代码如下。
+
+```c
+case IRQ_OFFSET + IRQ_KBD:
+        c = cons_getc();
+        cprintf("kbd [%03d] %c\n", c, c);
+        if (c == '3')
+        {
+            lab1_switch_to_user();
+            print_trapframe(tf);
+        }
+        else if (c == '0')
+        {
+            lab1_switch_to_kernel();
+            print_trapframe(tf);
+        }
+        break;
+```
+
+还有就是本来想引用下`init.c`中写好的函数，但是导入不了，只能再在`trap.c`中复制一下。
+
+看起来已经可以实现切换，完成挑战2。
+
+------
+
+*但是我比较疑惑的是，为什么输入3以后就会卡死。而且为什么输出的信息都一致？*
