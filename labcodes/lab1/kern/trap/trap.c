@@ -9,6 +9,29 @@
 #include <console.h>
 #include <kdebug.h>
 
+static void
+lab1_switch_to_user(void)
+{
+    //LAB1 CHALLENGE 1 : TODO
+    asm volatile(
+        "sub $0x8, %%esp \n"
+        "int %0 \n"
+        "movl %%ebp, %%esp \n"
+        :
+        : "i"(T_SWITCH_TOU));
+}
+
+static void
+lab1_switch_to_kernel(void)
+{
+    //LAB1 CHALLENGE 1 :  TODO
+    asm volatile(
+        "int %0 \n"
+        "movl %%ebp, %%esp\n"
+        :
+        : "i"(T_SWITCH_TOK));
+}
+
 #define TICK_NUM 100
 
 static void print_ticks()
@@ -195,11 +218,36 @@ trap_dispatch(struct trapframe *tf)
     case IRQ_OFFSET + IRQ_KBD:
         c = cons_getc();
         cprintf("kbd [%03d] %c\n", c, c);
+        if (c == '3')
+        {
+            lab1_switch_to_user();
+            print_trapframe(tf);
+        }
+        else if (c == '0')
+        {
+            lab1_switch_to_kernel();
+            print_trapframe(tf);
+        }
         break;
     //LAB1 CHALLENGE 1 : YOUR CODE you should modify below codes.
     case T_SWITCH_TOU:
+        // cprintf("switch to user");
+        if (tf->tf_cs != USER_CS)
+        {
+            tf->tf_cs = USER_CS;
+            tf->tf_ds = tf->tf_es = tf->tf_ss = USER_DS;
+            tf->tf_eflags |= FL_IOPL_MASK;
+        }
+        break;
+
     case T_SWITCH_TOK:
-        panic("T_SWITCH_** ??\n");
+        // cprintf("switch to kernel");
+        if (tf->tf_cs != KERNEL_CS)
+        {
+            tf->tf_cs = KERNEL_CS;
+            tf->tf_ds = tf->tf_es = tf->tf_ss = KERNEL_DS;
+            tf->tf_eflags &= ~FL_IOPL_MASK; //I/O Privilege Level bitmask   12 13 bit
+        }
         break;
     case IRQ_OFFSET + IRQ_IDE1:
     case IRQ_OFFSET + IRQ_IDE2:
