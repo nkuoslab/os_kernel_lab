@@ -10,19 +10,20 @@
 
 #define STACKFRAME_DEPTH 20
 
-extern const struct stab __STAB_BEGIN__[];  // beginning of stabs table
-extern const struct stab __STAB_END__[];    // end of stabs table
-extern const char __STABSTR_BEGIN__[];      // beginning of string table
-extern const char __STABSTR_END__[];        // end of string table
+extern const struct stab __STAB_BEGIN__[]; // beginning of stabs table
+extern const struct stab __STAB_END__[];   // end of stabs table
+extern const char __STABSTR_BEGIN__[];     // beginning of string table
+extern const char __STABSTR_END__[];       // end of string table
 
 /* debug information about a particular instruction pointer */
-struct eipdebuginfo {
-    const char *eip_file;                   // source code filename for eip
-    int eip_line;                           // source code line number for eip
-    const char *eip_fn_name;                // name of function containing eip
-    int eip_fn_namelen;                     // length of function's name
-    uintptr_t eip_fn_addr;                  // start address of function
-    int eip_fn_narg;                        // number of function arguments
+struct eipdebuginfo
+{
+    const char *eip_file;    // source code filename for eip
+    int eip_line;            // source code line number for eip
+    const char *eip_fn_name; // name of function containing eip
+    int eip_fn_namelen;      // length of function's name
+    uintptr_t eip_fn_addr;   // start address of function
+    int eip_fn_narg;         // number of function arguments
 };
 
 /* *
@@ -68,45 +69,56 @@ struct eipdebuginfo {
  * */
 static void
 stab_binsearch(const struct stab *stabs, int *region_left, int *region_right,
-           int type, uintptr_t addr) {
+               int type, uintptr_t addr)
+{
     int l = *region_left, r = *region_right, any_matches = 0;
 
-    while (l <= r) {
+    while (l <= r)
+    {
         int true_m = (l + r) / 2, m = true_m;
 
         // search for earliest stab with right type
-        while (m >= l && stabs[m].n_type != type) {
-            m --;
+        while (m >= l && stabs[m].n_type != type)
+        {
+            m--;
         }
-        if (m < l) {    // no match in [l, m]
+        if (m < l)
+        { // no match in [l, m]
             l = true_m + 1;
             continue;
         }
 
         // actual binary search
         any_matches = 1;
-        if (stabs[m].n_value < addr) {
+        if (stabs[m].n_value < addr)
+        {
             *region_left = m;
             l = true_m + 1;
-        } else if (stabs[m].n_value > addr) {
+        }
+        else if (stabs[m].n_value > addr)
+        {
             *region_right = m - 1;
             r = m - 1;
-        } else {
+        }
+        else
+        {
             // exact match for 'addr', but continue loop to find
             // *region_right
             *region_left = m;
             l = m;
-            addr ++;
+            addr++;
         }
     }
 
-    if (!any_matches) {
+    if (!any_matches)
+    {
         *region_right = *region_left - 1;
     }
-    else {
+    else
+    {
         // find rightmost region containing 'addr'
         l = *region_right;
-        for (; l > *region_left && stabs[l].n_type != type; l --)
+        for (; l > *region_left && stabs[l].n_type != type; l--)
             /* do nothing */;
         *region_left = l;
     }
@@ -118,8 +130,8 @@ stab_binsearch(const struct stab *stabs, int *region_left, int *region_right,
  * was found, and negative if not.  But even if it returns negative it
  * has stored some information into '*info'.
  * */
-int
-debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info) {
+int debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info)
+{
     const struct stab *stabs, *stab_end;
     const char *stabstr, *stabstr_end;
 
@@ -136,7 +148,8 @@ debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info) {
     stabstr_end = __STABSTR_END__;
 
     // String table validity checks
-    if (stabstr_end <= stabstr || stabstr_end[-1] != 0) {
+    if (stabstr_end <= stabstr || stabstr_end[-1] != 0)
+    {
         return -1;
     }
 
@@ -157,10 +170,12 @@ debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info) {
     int lline, rline;
     stab_binsearch(stabs, &lfun, &rfun, N_FUN, addr);
 
-    if (lfun <= rfun) {
+    if (lfun <= rfun)
+    {
         // stabs[lfun] points to the function name
         // in the string table, but check bounds just in case.
-        if (stabs[lfun].n_strx < stabstr_end - stabstr) {
+        if (stabs[lfun].n_strx < stabstr_end - stabstr)
+        {
             info->eip_fn_name = stabstr + stabs[lfun].n_strx;
         }
         info->eip_fn_addr = stabs[lfun].n_value;
@@ -168,7 +183,9 @@ debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info) {
         // Search within the function definition for the line number.
         lline = lfun;
         rline = rfun;
-    } else {
+    }
+    else
+    {
         // Couldn't find function stab!  Maybe we're in an assembly
         // file.  Search the whole file for the line number.
         info->eip_fn_addr = addr;
@@ -181,9 +198,12 @@ debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info) {
     // If found, set info->eip_line to the right line number.
     // If not found, return -1.
     stab_binsearch(stabs, &lline, &rline, N_SLINE, addr);
-    if (lline <= rline) {
+    if (lline <= rline)
+    {
         info->eip_line = stabs[rline].n_desc;
-    } else {
+    }
+    else
+    {
         return -1;
     }
 
@@ -191,22 +211,24 @@ debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info) {
     // We can't just use the "lfile" stab because inlined functions
     // can interpolate code from a different file!
     // Such included source files use the N_SOL stab type.
-    while (lline >= lfile
-           && stabs[lline].n_type != N_SOL
-           && (stabs[lline].n_type != N_SO || !stabs[lline].n_value)) {
-        lline --;
+    while (lline >= lfile && stabs[lline].n_type != N_SOL && (stabs[lline].n_type != N_SO || !stabs[lline].n_value))
+    {
+        lline--;
     }
-    if (lline >= lfile && stabs[lline].n_strx < stabstr_end - stabstr) {
+    if (lline >= lfile && stabs[lline].n_strx < stabstr_end - stabstr)
+    {
         info->eip_file = stabstr + stabs[lline].n_strx;
     }
 
     // Set eip_fn_narg to the number of arguments taken by the function,
     // or 0 if there was no containing function.
-    if (lfun < rfun) {
+    if (lfun < rfun)
+    {
         for (lline = lfun + 1;
              lline < rfun && stabs[lline].n_type == N_PSYM;
-             lline ++) {
-            info->eip_fn_narg ++;
+             lline++)
+        {
+            info->eip_fn_narg++;
         }
     }
     return 0;
@@ -217,31 +239,34 @@ debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info) {
  * of kernel entry, the start addresses of data and text segements, the start
  * address of free memory and how many memory that kernel has used.
  * */
-void
-print_kerninfo(void) {
+void print_kerninfo(void)
+{
     extern char etext[], edata[], end[], kern_init[];
     cprintf("Special kernel symbols:\n");
     cprintf("  entry  0x%08x (phys)\n", kern_init);
     cprintf("  etext  0x%08x (phys)\n", etext);
     cprintf("  edata  0x%08x (phys)\n", edata);
     cprintf("  end    0x%08x (phys)\n", end);
-    cprintf("Kernel executable memory footprint: %dKB\n", (end - kern_init + 1023)/1024);
+    cprintf("Kernel executable memory footprint: %dKB\n", (end - kern_init + 1023) / 1024);
 }
 
 /* *
  * print_debuginfo - read and print the stat information for the address @eip,
  * and info.eip_fn_addr should be the first address of the related function.
  * */
-void
-print_debuginfo(uintptr_t eip) {
+void print_debuginfo(uintptr_t eip)
+{
     struct eipdebuginfo info;
-    if (debuginfo_eip(eip, &info) != 0) {
+    if (debuginfo_eip(eip, &info) != 0)
+    {
         cprintf("    <unknow>: -- 0x%08x --\n", eip);
     }
-    else {
+    else
+    {
         char fnname[256];
         int j;
-        for (j = 0; j < info.eip_fn_namelen; j ++) {
+        for (j = 0; j < info.eip_fn_namelen; j++)
+        {
             fnname[j] = info.eip_fn_name[j];
         }
         fnname[j] = '\0';
@@ -251,9 +276,11 @@ print_debuginfo(uintptr_t eip) {
 }
 
 static __noinline uint32_t
-read_eip(void) {
+read_eip(void)
+{
     uint32_t eip;
-    asm volatile("movl 4(%%ebp), %0" : "=r" (eip));
+    asm volatile("movl 4(%%ebp), %0"
+                 : "=r"(eip));
     return eip;
 }
 
@@ -291,10 +318,10 @@ read_eip(void) {
  * Note that, the length of ebp-chain is limited. In boot/bootasm.S, before jumping
  * to the kernel entry, the value of ebp has been set to zero, that's the boundary.
  * */
-void
-print_stackframe(void) {
-     /* LAB1 YOUR CODE : STEP 1 */
-     /* (1) call read_ebp() to get the value of ebp. the type is (uint32_t);
+void print_stackframe(void)
+{
+    /* LAB1 YOUR CODE : STEP 1 */
+    /* (1) call read_ebp() to get the value of ebp. the type is (uint32_t);
       * (2) call read_eip() to get the value of eip. the type is (uint32_t);
       * (3) from 0 .. STACKFRAME_DEPTH
       *    (3.1) printf value of ebp, eip
@@ -305,5 +332,20 @@ print_stackframe(void) {
       *           NOTICE: the calling funciton's return addr eip  = ss:[ebp+4]
       *                   the calling funciton's ebp = ss:[ebp]
       */
-}
 
+    uint32_t ebp = read_ebp();
+    uint32_t eip = read_eip();
+    for (int i = 0; i < STACKFRAME_DEPTH && ebp != 0; i++)
+    {
+        cprintf("ebp:0x%08x eip:0x%08x args:", ebp, eip);
+        for (int j = 0; j < 4; j++)
+        {
+            uint32_t arg = *((uint32_t *)ebp + 2 + j);
+            cprintf("0x%08x ", arg);
+        }
+        cprintf("\n");
+        print_debuginfo(eip - 1);
+        eip = *((uint32_t *)ebp + 1);
+        ebp = *((uint32_t *)ebp);
+    }
+}
