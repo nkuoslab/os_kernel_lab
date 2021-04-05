@@ -1,7 +1,7 @@
-#include <pmm.h>
-#include <list.h>
-#include <string.h>
 #include <default_pmm.h>
+#include <list.h>
+#include <pmm.h>
+#include <string.h>
 
 /*  In the First Fit algorithm, the allocator keeps a list of free blocks
  * (known as the free list). Once receiving a allocation request for memory,
@@ -11,7 +11,7 @@
  * another free block.
  *  Please refer to Page 196~198, Section 8.2 of Yan Wei Min's Chinese book
  * "Data Structure -- C programming language".
-*/
+ */
 // LAB2 EXERCISE 1: YOUR CODE
 // you should rewrite functions: `default_init`, `default_init_memmap`,
 // `default_alloc_pages`, `default_free_pages`.
@@ -36,10 +36,10 @@
  * (3) `default_init_memmap`:
  *  CALL GRAPH: `kern_init` --> `pmm_init` --> `page_init` --> `init_memmap` -->
  * `pmm_manager` --> `init_memmap`.
- *  This function is used to initialize a free block (with parameter `addr_base`,
- * `page_number`). In order to initialize a free block, firstly, you should
- * initialize each page (defined in memlayout.h) in this free block. This
- * procedure includes:
+ *  This function is used to initialize a free block (with parameter
+ * `addr_base`, `page_number`). In order to initialize a free block, firstly,
+ * you should initialize each page (defined in memlayout.h) in this free block.
+ * This procedure includes:
  *  - Setting the bit `PG_property` of `p->flags`, which means this page is
  * valid. P.S. In function `pmm_init` (in pmm.c), the bit `PG_reserved` of
  * `p->flags` is already set.
@@ -52,11 +52,9 @@
  * (e.g.: `list_add_before(&free_list, &(p->page_link));` )
  *  Finally, we should update the sum of the free memory blocks: `nr_free += n`.
  * (4) `default_alloc_pages`:
- *  Search for the first free block (block size >= n) in the free list and reszie
- * the block found, returning the address of this block as the address required by
- * `malloc`.
- *  (4.1)
- *      So you should search the free list like this:
+ *  Search for the first free block (block size >= n) in the free list and
+ * reszie the block found, returning the address of this block as the address
+ * required by `malloc`. (4.1) So you should search the free list like this:
  *          list_entry_t le = &free_list;
  *          while((le=list_next(le)) != &free_list) {
  *          ...
@@ -75,40 +73,35 @@
  *          pages of this free block. (e.g.: `le2page(le,page_link))->property
  *          = p->property - n;`)
  *          (4.1.3)
- *              Re-caluclate `nr_free` (number of the the rest of all free block).
- *          (4.1.4)
- *              return `p`.
- *      (4.2)
- *          If we can not find a free block with its size >=n, then return NULL.
- * (5) `default_free_pages`:
- *  re-link the pages into the free list, and may merge small free blocks into
- * the big ones.
- *  (5.1)
+ *              Re-caluclate `nr_free` (number of the the rest of all free
+ * block). (4.1.4) return `p`. (4.2) If we can not find a free block with its
+ * size >=n, then return NULL.
+ * (5) `default_free_pages`: re-link the pages into
+ * the free list, and may merge small free blocks into the big ones.
+ * (5.1)
  *      According to the base address of the withdrawed blocks, search the free
  *  list for its correct position (with address from low to high), and insert
  *  the pages. (May use `list_next`, `le2page`, `list_add_before`)
  *  (5.2)
- *      Reset the fields of the pages, such as `p->ref` and `p->flags` (PageProperty)
- *  (5.3)
- *      Try to merge blocks at lower or higher addresses. Notice: This should
- *  change some pages' `p->property` correctly.
+ *      Reset the fields of the pages, such as `p->ref` and `p->flags`
+ * (PageProperty)
+ * (5.3) Try to merge blocks at lower or higher addresses.
+ * Notice: This should change some pages' `p->property` correctly.
  */
 free_area_t free_area;
 
 #define free_list (free_area.free_list)
 #define nr_free (free_area.nr_free)
 
-static void
-default_init(void) {
+static void default_init(void) {
     list_init(&free_list);
     nr_free = 0;
 }
 
-static void
-default_init_memmap(struct Page *base, size_t n) {
+static void default_init_memmap(struct Page* base, size_t n) {
     assert(n > 0);
-    struct Page *p = base;
-    for (; p != base + n; p ++) {
+    struct Page* p = base;
+    for (; p != base + n; p++) {
         assert(PageReserved(p));
         p->flags = p->property = 0;
         set_page_ref(p, 0);
@@ -116,75 +109,86 @@ default_init_memmap(struct Page *base, size_t n) {
     base->property = n;
     SetPageProperty(base);
     nr_free += n;
-    list_add(&free_list, &(base->page_link));
+    list_add_before(&free_list, &(base->page_link));
 }
 
-static struct Page *
-default_alloc_pages(size_t n) {
+static struct Page* default_alloc_pages(size_t n) {
     assert(n > 0);
     if (n > nr_free) {
         return NULL;
     }
-    struct Page *page = NULL;
-    list_entry_t *le = &free_list;
+    struct Page* page = NULL;
+    list_entry_t* le = &free_list;
     while ((le = list_next(le)) != &free_list) {
-        struct Page *p = le2page(le, page_link);
+        struct Page* p = le2page(le, page_link);
         if (p->property >= n) {
             page = p;
             break;
         }
     }
     if (page != NULL) {
-        list_del(&(page->page_link));
         if (page->property > n) {
-            struct Page *p = page + n;
+            struct Page* p = page + n;
+            SetPageProperty(p);
             p->property = page->property - n;
-            list_add(&free_list, &(p->page_link));
-    }
+            list_add(&(page->page_link), &(p->page_link));
+        }
+        list_del(&(page->page_link));
         nr_free -= n;
         ClearPageProperty(page);
     }
     return page;
 }
 
-static void
-default_free_pages(struct Page *base, size_t n) {
+static void default_free_pages(struct Page* base, size_t n) {
     assert(n > 0);
-    struct Page *p = base;
-    for (; p != base + n; p ++) {
+    struct Page* p = base;
+    // 清除标志位和ref
+    for (; p != base + n; p++) {
         assert(!PageReserved(p) && !PageProperty(p));
         p->flags = 0;
         set_page_ref(p, 0);
     }
+    // 再次连入链表设置第一个页的相关属性
     base->property = n;
     SetPageProperty(base);
-    list_entry_t *le = list_next(&free_list);
+    list_entry_t* le = list_next(&free_list);
     while (le != &free_list) {
         p = le2page(le, page_link);
         le = list_next(le);
+        // 如果base开始的空闲块的下一个页与p相等，即他们连上了，就进行合并
         if (base + base->property == p) {
             base->property += p->property;
             ClearPageProperty(p);
             list_del(&(p->page_link));
-        }
-        else if (p + p->property == base) {
+            // 如果p开始的空闲块的下一个页与base相等，也进行合并
+        } else if (p + p->property == base) {
             p->property += base->property;
+            base->property = 0;
             ClearPageProperty(base);
             base = p;
             list_del(&(p->page_link));
         }
     }
     nr_free += n;
-    list_add(&free_list, &(base->page_link));
+    le = list_next(&free_list);
+    // 找到合适的位置
+    while (le != &free_list) {
+        p = le2page(le, page_link);
+        if (base + base->property < p) {
+            break;
+        }
+        le = list_next(le);
+    }
+    list_add_before(le,
+                    &(base->page_link));  //将每一空闲块对应的链表插入空闲链表中
 }
 
-static size_t
-default_nr_free_pages(void) {
+static size_t default_nr_free_pages(void) {
     return nr_free;
 }
 
-static void
-basic_check(void) {
+static void basic_check(void) {
     struct Page *p0, *p1, *p2;
     p0 = p1 = p2 = NULL;
     assert((p0 = alloc_page()) != NULL);
@@ -221,7 +225,7 @@ basic_check(void) {
     free_page(p0);
     assert(!list_empty(&free_list));
 
-    struct Page *p;
+    struct Page* p;
     assert((p = alloc_page()) == p0);
     assert(alloc_page() == NULL);
 
@@ -234,16 +238,16 @@ basic_check(void) {
     free_page(p2);
 }
 
-// LAB2: below code is used to check the first fit allocation algorithm (your EXERCISE 1) 
-// NOTICE: You SHOULD NOT CHANGE basic_check, default_check functions!
-static void
-default_check(void) {
+// LAB2: below code is used to check the first fit allocation algorithm (your
+// EXERCISE 1) NOTICE: You SHOULD NOT CHANGE basic_check, default_check
+// functions!
+static void default_check(void) {
     int count = 0, total = 0;
-    list_entry_t *le = &free_list;
+    list_entry_t* le = &free_list;
     while ((le = list_next(le)) != &free_list) {
-        struct Page *p = le2page(le, page_link);
+        struct Page* p = le2page(le, page_link);
         assert(PageProperty(p));
-        count ++, total += p->property;
+        count++, total += p->property;
     }
     assert(total == nr_free_pages());
 
@@ -293,8 +297,8 @@ default_check(void) {
     le = &free_list;
     while ((le = list_next(le)) != &free_list) {
         assert(le->next->prev == le && le->prev->next == le);
-        struct Page *p = le2page(le, page_link);
-        count --, total -= p->property;
+        struct Page* p = le2page(le, page_link);
+        count--, total -= p->property;
     }
     assert(count == 0);
     assert(total == 0);
@@ -309,4 +313,3 @@ const struct pmm_manager default_pmm_manager = {
     .nr_free_pages = default_nr_free_pages,
     .check = default_check,
 };
-
