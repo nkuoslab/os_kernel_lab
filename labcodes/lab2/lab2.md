@@ -32,9 +32,16 @@ Offset  Size    Description
 10h    4字节   type of address range      #内存类型
 ```
 
+关于代码中的两种类型
+
+```
+ARM    01h    memory, available to OS
+ARR    02h    reserved, not available (e.g. system ROM, memory-mapped device)
+```
+
 通过BIOS中断获取内存可调用参数为e820h的INT 15h BIOS中断。
 
-参数如下：
+参数如下：.
 
 ```
 eax：e820h：INT 15的中断调用参数；
@@ -119,7 +126,7 @@ kern_entry:									# 内核入口点
     movl %cr0, %eax
     orl $(CR0_PE | CR0_PG | CR0_AM | CR0_WP | CR0_NE | CR0_TS | CR0_EM | CR0_MP), %eax
     andl $~(CR0_TS | CR0_EM), %eax
-    movl %eax, %cr0							# 此时CRO.PE已经置1，页机制开启，页表地址为__boot_pgdir
+    movl %eax, %cr0							# 此时CR0.PE(第0位)已经置1，保护模式开启;CR0.PG(第31位)也置1，页机制开启，页表地址为__boot_pgdir
     
     #此时内核仍然运行在0-4M的空间上，但是内核要运行的虚拟地址在高地址，因此更新eip
 
@@ -139,7 +146,7 @@ kern_entry:									# 内核入口点
 +-------------------------------------------------------------------------------+
 ```
 
-每一个一级页表项大小为4K，可以映射4MB的物理内存。
+每一个二级页表项大小为4K，可以映射4MB的物理内存。
 
 ```assembly
 # kernel builtin pgdir
@@ -147,14 +154,16 @@ kern_entry:									# 内核入口点
 # These page directory table and page table can be reused!
 .section .data.pgdir
 .align PGSIZE
+# 一级页表的起始地址必须是页对齐地址，低12位为0，因为它也存在一个页中
 __boot_pgdir:
 .globl __boot_pgdir
     # map va 0 ~ 4M to pa 0 ~ 4M (temporary)
-    # 将页表的物理地址填入页目录表的第一项 PTE_P 有效位 PTE-U 用户 PTE_W 可写
+    # 将页表的物理地址填入页目录表的第一项 PTE_P 有效位 PTE_U 用户 PTE_W 可写
     .long REALLOC(__boot_pt1) + (PTE_P | PTE_U | PTE_W)
     # space用于将指定范围大小内的空间全部设置为0(等价于P位为0，即不存在的、无效的页表项)
-    # 填充页目录表知道0xC0000000那项
-    # KERNBASE=0xC0000000, PGSHIFT=12, 右移12位再右移10位，相当于除以4M
+    # 填充页目录表直到其映射的物理地址为0xC0000000那项
+    # 这里的计算想算出来这一段物理地址对应到页目录表上的区域/偏移，从而才能建立从KERNBASE开始的4M内存的映射
+    # KERNBASE=0xC0000000, PGSHIFT=12, 右移12位再右移10位，从而得到一级页号（结合前面那个结构很好理解）
     # 再左移两位因为一个页表项32位，即4byte
     # 再减去当前地址减掉页目录表的地址，相当于减去页目录表第一项的地址
     .space (KERNBASE >> PGSHIFT >> 10 << 2) - (. - __boot_pgdir) # pad to PDE of KERNBASE
@@ -199,7 +208,7 @@ spin:
     jmp spin
 ```
 
-- 一点题外话：
+- 为什么内核运行在0-4M的地址空间？：
 
   在`tools/kernel.ld`中定义了内核的起始地址
 
@@ -329,32 +338,32 @@ uintptr_t boot_cr3;
 
 >  先介绍下函数指针
 >
-> 函数本身也是有地址的，因此也就可以有一个指针指向这个地址，如果知道函数的具体类型，就可以通过这个地址来调用这个函数。
+>  函数本身也是有地址的，因此也就可以有一个指针指向这个函数，如果知道函数的具体类型，就可以通过这个地址来调用这个函数。
 >
-> 返回值类型 (*函数指针名)（参数1，参数2，...）
+>  返回值类型 (*函数指针名)（参数1，参数2，...）
 >
-> `int (*fun_ptr)(int,int)`
+>  `int (*fun_ptr)(int,int)`
 >
-> `void (*funP)(int)`
+>  `void (*funP)(int)`
 >
-> 最面前的是函数的返回值类型，括号中是名字，最后面括号是参数表
+>  最面前的是函数的返回值类型，括号中是名字，最后面括号是参数表
 >
-> 调用时，直接`函数指针名()`即可。
+>  调用时，直接`函数指针名()`即可。
 >
-> -----
+>  -----
 >
-> 再解释下lab1中的那个函数指针
+>  再解释下lab1中的那个函数指针
 >
-> `((void (*)(void))(ELFHDR->e_entry & 0xFFFFFF))()`
+>  `((void (*)(void))(ELFHDR->e_entry & 0xFFFFFF))()`
 >
-> - 为什么这个这么长？
->     - 因为它本身只是一个地址，首先强制类型转换成函数指针才能调用
+>  - 为什么这个这么长？
+>    - 因为它本身只是一个地址，首先强制类型转换成函数指针才能调用
 >
-> - 具体结构解析
->     - 先看最右边（）是函数调用的括号，无参数。
->     - 左边整体括号表明这是一个整体，与优先级相关。
->   	- `(void (*)(void))`外侧括号是强制类型转换的括号，类比`(int)(3.0)`，同理`(ELFHDR->e_entry & 0xFFFFFF)`的括号。
->   	- 再看类型`void (*)(void)`，类比`int`，这是这个函数指针的类型，具体是没有参数也没有返回值的函数指针。
+>  - 具体结构解析
+>    - 先看最右边（）是函数调用的括号，无参数。
+>    - 左边整体括号表明这是一个整体，与优先级相关。
+>    - `(void (*)(void))`外侧括号是强制类型转换的括号，类比`(int)(3.0)`，同理`(ELFHDR->e_entry & 0xFFFFFF)`的括号。
+>    - 再看类型`void (*)(void)`，类比`int`，这是这个函数指针的类型，具体是没有参数也没有返回值的函数指针。
 
 首先看`pmm_manager`的结构。
 
@@ -400,7 +409,7 @@ init_pmm_manager(void) {
 
 ##### `page_init()`
 
-通过`pmm_manager`获得可用物理内存范围后，`ucore`使用`Page`来管理物理页（按4KB对齐，且大小为4KB的物理内存单元）。`Page`要尽可能的小，因为其数量很多，加在一起比较耗空间（因为它也在内存里）。
+通过`pmm_manager`获得可用物理内存范围后，`ucore`使用`Page`来管理物理页（按4KB对齐，且大小为4KB的物理内存单元）。`Page`的大小不宜过大也不宜过小。过小会使得页表占的空间很大。由于一个物理页需要占用一个`Page`结构的空间，`Page`结构在设计时须尽可能小，以减少对内存的占用。
 
 首先看`Page`结构：
 
@@ -414,12 +423,12 @@ init_pmm_manager(void) {
 struct Page {
     // 当前物理页被虚拟页面引用的次数(共享内存时，影响物理页面的回收)
     int ref;                        // page frame's reference counter
-    // 标志位集合(目前只用到了第0和第1个bit位) bit 0表示是否被保留（可否用于物理内存分配: 0未保留，1被保留）;bit1后面说
+    // 标志位集合(目前只用到了第0和第1个bit位) bit 0 PG_reserve 保留位（可否用于物理内存分配: 0未保留，1被保留）;bit1 PG_property 用处也是不同算法意义不同(first fit 空闲块头部置1，否则为0)
     uint32_t flags;                 // array of flags that describe the status of the page frame
     // 在不同分配算法中意义不同(first fit算法中表示当前空闲块中总共所包含的空闲页个数 ，只有位于空闲块头部的Page结构才拥有该属性，否则为0)
     unsigned int property;          // the num of free block, used in first fit pm manager
     // 空闲链表free_area_t的链表节点引用，是一个双向连接Page的链表指针
-    //用到这个变量的Page也是头一页
+    // 用到这个变量的Page也是头一页
     list_entry_t page_link;         // free list link
 };
 ```
@@ -547,6 +556,10 @@ pa2page(uintptr_t pa) {
 }
 ```
 
+注意`page_init`代码中遍历`e820map`两次，第一次是为了找到最大的的物理内存地址`maxpa`，然后根据它来计算所需的`Page`数目从而分配空间，空间是从内核结束的地址开始。结束的地址到`KERNBASE`都是空闲空间。第二次是调用`init_memmap`对这些空闲空间初始化。
+
+[![cGWNwV.png](https://z3.ax1x.com/2021/04/07/cGWNwV.png)](https://imgtu.com/i/cGWNwV)
+
 ## 练习1：**实现` first-fit `连续物理内存分配算法**
 
 ### 准备工作
@@ -634,7 +647,7 @@ list_entry_t *list_prev(list_entry_t *listelm)					 // 上一个元素
 
 其次，看代码。`offsetof(type, member)`接受一个结构体类型`type`和结构体中一个变量`member`，返回`member`变量到结构体头部的地址。
 
-具体原理：首先把构造一个`type*`，其指向的地址是0，然后获取得到其`member`变量`((type *)0)->member`，之后通过`&`取其地址，再减去结构体起始地址0，就得到了地址差。再转换成`size_t`（即`unsigned int`）类型即可。
+具体原理：首先构造一个`type*`，其指向的地址是0，然后获取得到其`member`变量`((type *)0)->member`，之后通过`&`取其地址，再减去结构体起始地址0，就得到了地址差。再转换成`size_t`（即`unsigned int`）类型即可。
 
 `to_struct(ptr, type, member)`接受链表指针`ptr`，向前移动其指向的地址，移动距离即为结构体中链表指针与结构体头的差，用`offsetof`得到。再把其类型转换为对应的结构体类型即可。
 
@@ -672,7 +685,7 @@ kern_init ==> pmm_init ==> page_init ==> init_memmap ==> pmm_manager->init_memma
 
   `PG_property`如果是1，那么这个`Page`是一个连续空闲块的第一个页，可以用于分配；如果为0，并且是第一个块，说明被占用，不能分配，否则不是第一个块。
 
-  另一个标志位`PG_reserved`已经在`pmm_init`中被置位了。（具体在哪目前没找到，后续补充）
+  另一个标志位`PG_reserved`已经在`page_init`中被置位了。
 
 - 设置`Page`的`property`。在`first-fit`中，第一页为页的个数，余下页为0。
 
@@ -713,7 +726,7 @@ set_page_ref(struct Page *page, int val) {
 }
 ```
 
-这里的注释比较疑惑了，正常理解肯定每次连入`free_list`的是一个大的空闲块，但是这里注释比较迷惑，好像不是这个意思。还有就是注意这个函数是在前面`page_init`中根据`e820map`循环调用的，并且`free_list`中是按地址排序，所以修改一下`list_add`为`list_add_before`，使每次新连入的空闲块在后面。
+这里的注释比较疑惑了，正确理解肯定这个函数每次初始化一个大的空闲块并把它连入`free_list`的。（但是这里注释比较迷惑，好像不是这个意思）。还有就是注意这个函数是在前面`page_init`中根据`e820map`循环调用的，并且`free_list`中是按地址排序，所以修改一下`list_add`为`list_add_before`，使每次新连入的空闲块在后面（即高地址）。
 
 ### `default_alloc_pages`
 
@@ -866,7 +879,7 @@ static void default_free_pages(struct Page* base, size_t n) {
 
 ### 改进空间
 
-上面代码中，链表的查找和插入都需要遍历整个链表，比较耗时。改进可以采用树型结构，或者改进一下空闲块的标记，使得第一页和最后一页均有标记。
+上面代码中，链表的查找和插入都需要遍历整个链表，比较耗时。改进可以采用树型结构，或者改进一下空闲块的结构，使得第一页和最后一页均有标记。
 
 -----
 
@@ -880,3 +893,134 @@ static void default_free_pages(struct Page* base, size_t n) {
 
 最上方首先打印出由`BIOS 0x15`中断探测物理内存得到的`e820map`，然后便是`check_alloc_page() succeed!`，表明`first_fit`实现无错误。
 
+-----
+
+## 练习2：实现寻找虚拟地址对应的页表项
+
+通过设置页表和对应的页表项，可建立虚拟内存地址和物理内存地址的对应关系。其中的` get_pte` 函数是设置页表项环节中的一个重要步骤。此函数找到一个虚地址对应的二级页表项的内核虚地址，如果此二级页表项不存在，则分配一个包含此项的二级页表。本练习需要补全`get_pte`函数` in kern/mm/pmm.c` ，实现其功能。
+
+-----
+
+[![cGWWFO.png](https://z3.ax1x.com/2021/04/07/cGWWFO.png)](https://imgtu.com/i/cGWWFO)
+
+在保护模式中，x86 体系结构将内存地址分成三种：逻辑地址（也称虚地址）、线性地址和物理地址。逻辑地址即是程序指令中使用的地址，物理地址是实际访问内存的地址。逻辑地址通过段式管理的地址映射可以得到线性地址，线性地址通过页式管理的地址映射得到物理地址。
+
+在` ucore `中段式管理只起到了一个过渡作用，它将逻辑地址不加转换直接映射成线性地址。
+
+-----
+
+- `PTE`：`Page Table Entry` 页表项，每一个页表项对应一个物理页，每一个二级页表有1024个页表项。
+- `PDE`：`Page Directory Entry`页目录项，每一个页目录项对应一个二级页表，每一个一级页表（页目录表）有1024个页目录项。
+
+- `pte_t *get_pte(pde_t *pgdir, uintptr_t la, bool create)`
+
+  其中三个类型`pte_t`、`pde_t`、`uintptr_t`，都为`unsigned int`。
+
+  - `pde_t`全称为 `page directory entry`，也就是一级页表的表项（注意：`pgdir`实际不是表项，而是一级页表本身。实际上应该新定义一个类型`pgd_t`来表示一级页表本身）
+  - `pte_t`全称为 `page table entry`，表示二级页表的表项。
+  - `uintptr_t`表示为线性地址，由于段式管理只做直接映射，所以它也是逻辑地址。
+
+  如果在查找二级页表项时，发现对应的二级页表不存在，则需要根据`create`参数的值来处理是否创建新的二级页表。如果`create`参数为0，则`get_pte`返回`NULL`；如果`create`参数不为0，则`get_pte`需要申请一个新的物理页，再在一级页表中添加页目录项指向表示二级页表的新物理页。注意，新申请的页必须全部设定为零，因为这个页所代表的虚拟地址都没有被映射。
+
+  当建立从一级页表到二级页表的映射时，需要注意设置控制位。这里应该设置同时设置上`PTE_U`、`PTE_W`和`PTE_P`。如果原来就有二级页表，或者新建立了页表，则只需返回对应项的地址即可。
+
+  只有当一级二级页表的项都设置了用户写权限后，用户才能对对应的物理地址进行读写。所以我们可以在一级页表先给用户写权限，再在二级页表上面根据需要限制用户的权限，对物理页进行保护。
+
+了解了功能和一些细节之后，开始写代码。
+
+其中用到的一些宏：
+
+```c
+//pmm.h
+/* *
+ * KADDR - takes a physical address and returns the corresponding kernel virtual
+ * address. It panics if you pass an invalid physical address.
+ * */
+// 把物理地址转换成内核虚拟地址
+#define KADDR(pa) ({                                                    \
+            uintptr_t __m_pa = (pa);                                    \
+            size_t __m_ppn = PPN(__m_pa);                               \
+            if (__m_ppn >= npage) {                                     \
+                panic("KADDR called with invalid pa %08lx", __m_pa);    \
+            }                                                           \
+            (void *) (__m_pa + KERNBASE);                               \
+        })
+
+//mmu.h
+// page directory index
+// 根据虚拟地址返回对应的页目录表的下标
+#define PDX(la) ((((uintptr_t)(la)) >> PDXSHIFT) & 0x3FF)
+
+//pmm.h
+// 设置Page的ref的值
+static inline void
+set_page_ref(struct Page *page, int val) {
+    page->ref = val;
+}
+
+// 返回Page的物理地址
+static inline uintptr_t
+page2pa(struct Page *page) {
+    return page2ppn(page) << PGSHIFT;
+}
+```
+
+```c
+pte_t* get_pte(pde_t* pgdir, uintptr_t la, bool create) {
+    // 获取la对应的页目录项
+    pde_t* pdep = &pgdir[PDX(la)];
+    // 通过检查页目录项的存在位判断对应的二级页表是否存在
+    if (!(*pdep & 0x1)) {
+        if (create) {
+            // 不存在且create=1,则创建一个二级页表
+            struct Page* page = alloc_page();
+            // 给这个页设置引用位
+            set_page_ref(page, 1);
+            // 得到这个页的物理地址
+            uintptr_t pa = page2pa(page);
+            // 清空这一页表，注意memset使用的地址是内核虚拟地址
+            memset(KADDR(pa), 0, PGSIZE);
+            // 设置页目录表项的内容
+            // (页表起始物理地址 & ~0x0FFF) | PTE_U | PTE_W | PTE_P
+            // 为什么要去除后12位，因为指向的要是页目录项指向的是一个二级页表的起始地址
+            *pdep = (pa & ~0x0FFF) | PTE_U | PTE_W | PTE_P;
+        } else {
+            return NULL;
+        }
+    }
+    // 这里使用的地址也是虚拟地址
+    return &(((pte_t*)KADDR(*pdep & ~0xfff))[PTX(la)]);
+}
+```
+
+-----
+
+- 请描述页目录项（`Page Directory Entry`）和页表项（`Page Table Entry`）中每个组成部分的含义以及对`ucore`而言的潜在用处。
+
+  - `PDE`
+
+    [![cYn1Wn.png](https://z3.ax1x.com/2021/04/08/cYn1Wn.png)](https://imgtu.com/i/cYn1Wn)
+
+    - P (`Present`) 位：表示该页保存在物理内存中（1），或者不在（0）。
+    - R/W (`Read/Write`) 位：表示该页只读/可读可写。
+    - U/S (`User/Superviosr `) 位：表示该页可以被任何权限用户/超级用户访问。
+    - WT (`Write Through`) 位：写直达/写回。
+    - CD (`Cache Disable`) 位：`Cache`缓存禁止（1）/开启（0）
+    - A (`Access`) 位：表示该页被写过。
+    - PS (`Size`) 位：表示一个页 4MB(1)/4KB(0) 。
+    - G（`global`位）：表示是否将虚拟地址与物理地址的转换结果缓存到 `TLB `中。
+    - Avail： 9-11 位保留给 OS 使用。
+    - 12-31 位： `PTE` 基址的高20位（由于按页对齐，后12位均为0）。
+
+  - `PTE`
+
+    [![cYQ3AU.png](https://z3.ax1x.com/2021/04/08/cYQ3AU.png)](https://imgtu.com/i/cYQ3AU)
+
+    - D(`Dirty`)位：脏位。
+    - 12-31 位： 页基址的高20位（由于按页对齐，后12位均为0）。
+
+  - 高20位保存对应二级页表/页的高二十位地址，低12位保存一些标志位。
+
+- 如果`ucore`执行过程中访问内存，出现了页访问异常，请问硬件要做哪些事情？
+
+  会触发缺页异常， CPU 将产生页访问异常的线性地址放到 cr2 寄存器中，然后触发异常，由异常处理程序根缺页异常类型来进行不同处理，如从磁盘中读取出内存页等。

@@ -266,9 +266,9 @@ void pmm_init(void) {
 
     // We need to alloc/free the physical memory (granularity is 4KB or other
     // size). So a framework of physical memory manager (struct pmm_manager)is
-    // defined in pmm.h First we should init a physical memory manager(pmm) based
-    // on the framework. Then pmm can alloc/free the physical memory. Now the
-    // first_fit/best_fit/worst_fit/buddy_system pmm are available.
+    // defined in pmm.h First we should init a physical memory manager(pmm)
+    // based on the framework. Then pmm can alloc/free the physical memory. Now
+    // the first_fit/best_fit/worst_fit/buddy_system pmm are available.
     init_pmm_manager();
 
     // detect physical memory space, reserve already used memory,
@@ -297,7 +297,7 @@ void pmm_init(void) {
     // stack (ss:esp) in TSS, setup TSS in gdt, load TSS
     gdt_init();
 
-    // now the basic virtual memory map(see memalyout.h) is established.
+    // now the basic virtual memory map(see memlayout.h) is established.
     // check the correctness of the basic virtual memory map.
     check_boot_pgdir();
 
@@ -305,12 +305,12 @@ void pmm_init(void) {
 }
 
 // get_pte - get pte and return the kernel virtual address of this pte for la
-//        - if the PT contians this pte didn't exist, alloc a page for PT
+//        - if the PT contains this pte didn't exist, alloc a page for PT
 // parameter:
 //  pgdir:  the kernel virtual base address of PDT
 //  la:     the linear address need to map
 //  create: a logical value to decide if alloc a page for PT
-// return vaule: the kernel virtual address of this pte
+// return value: the kernel virtual address of this pte
 pte_t* get_pte(pde_t* pgdir, uintptr_t la, bool create) {
     /* LAB2 EXERCISE 2: YOUR CODE
      *
@@ -345,6 +345,29 @@ pte_t* get_pte(pde_t* pgdir, uintptr_t la, bool create) {
     }
     return NULL;          // (8) return page table entry
 #endif
+    // 获取la对应的页目录项
+    pde_t* pdep = &pgdir[PDX(la)];
+    // 通过检查页目录项的存在位判断对应的二级页表是否存在
+    if (!(*pdep & 0x1)) {
+        if (create) {
+            // 不存在且create=1,则创建一个二级页表
+            struct Page* page = alloc_page();
+            // 给这个页设置引用位
+            set_page_ref(page, 1);
+            // 得到这个页的物理地址
+            uintptr_t pa = page2pa(page);
+            // 清空这一页表，注意memset使用的地址是内核虚拟地址
+            memset(KADDR(pa), 0, PGSIZE);
+            // 设置页目录表项的内容
+            // (页表起始物理地址 & ~0x0FFF) | PTE_U | PTE_W | PTE_P
+            // 为什么要去除后12位，因为指向的要是页目录项指向的是一个二级页表的起始地址
+            *pdep = (pa & ~0x0FFF) | PTE_U | PTE_W | PTE_P;
+        } else {
+            return NULL;
+        }
+    }
+    // 这里使用的地址也是虚拟地址
+    return &(((pte_t*)KADDR(*pdep & ~0xfff))[PTX(la)]);
 }
 
 // get_page - get related Page struct for linear address la using PDT pgdir
