@@ -1024,3 +1024,141 @@ pte_t* get_pte(pde_t* pgdir, uintptr_t la, bool create) {
 - 如果`ucore`执行过程中访问内存，出现了页访问异常，请问硬件要做哪些事情？
 
   会触发缺页异常， CPU 将产生页访问异常的线性地址放到 cr2 寄存器中，然后触发异常，由异常处理程序根缺页异常类型来进行不同处理，如从磁盘中读取出内存页等。
+
+-----
+
+## 练习3：释放某虚地址所在的页并取消对应二级页表项的映射
+
+当释放一个包含某虚地址的物理内存页时，需要让对应此物理内存页的管理数据结构`Page`做相关的清除处理，使得此物理内存页成为空闲；另外还需把表示虚地址与物理地址对应关系的二级页表项清除。
+
+-----
+
+用到的一些宏/函数
+
+```c
+// pmm.h
+// 根据页表项返回对应的Page
+static inline struct Page *
+pte2page(pte_t pte) {
+    if (!(pte & PTE_P)) {
+        panic("pte2page called with invalid pte");
+    }
+    return pa2page(PTE_ADDR(pte));
+}
+
+// 释放一页
+#define free_page(page) free_pages(page, 1)
+
+// Page的ref减1
+// 当ref为0时，这一个Page需要释放
+static inline int
+page_ref_dec(struct Page *page) {
+    page->ref -= 1;
+    return page->ref;
+}
+
+// pmm.c
+// 标记快表中的不可用
+// invalidate a TLB entry, but only if the page tables being
+// edited are the ones currently in use by the processor.
+void tlb_invalidate(pde_t* pgdir, uintptr_t la) {
+    if (rcr3() == PADDR(pgdir)) {
+        invlpg((void*)la);
+    }
+}
+```
+
+根据所给注释可以很容易的写出代码。
+
+```c
+static inline void page_remove_pte(pde_t* pgdir, uintptr_t la, pte_t* ptep){
+	// 首先查看目前的页表项是否有效，查看最低位PTE_P
+    if (*ptep & 0x1) {
+        // 有效就获得对应的Page结构
+        struct Page* page = pte2page(*ptep);
+        // 然后减少Page的ref位-1，并且根据返回值来判断是否应该释放这一Page
+        if (!page_ref_dec(page)) {
+            // 如果为0则释放这一Page
+            free_page(page);
+        }
+        // 清除二级页表项
+        *ptep = 0;
+        // 标记TLB中的这一Page无效
+        tlb_invalidate(pgdir, la);
+    }
+}
+```
+
+这样`Lab2`的`Exercise`就完成了。
+
+`make qemu`得到如下输出：
+
+```c
+memory management: default_pmm_manager
+e820map:
+  memory: 0009fc00, [00000000, 0009fbff], type = 1.
+  memory: 00000400, [0009fc00, 0009ffff], type = 2.
+  memory: 00010000, [000f0000, 000fffff], type = 2.
+  memory: 07ee0000, [00100000, 07fdffff], type = 1.
+  memory: 00020000, [07fe0000, 07ffffff], type = 2.
+  memory: 00040000, [fffc0000, ffffffff], type = 2.
+check_alloc_page() succeeded!
+check_pgdir() succeeded!
+check_boot_pgdir() succeeded!
+-------------------- BEGIN --------------------
+PDE(0e0) c0000000-f8000000 38000000 urw
+  |-- PTE(38000) c0000000-f8000000 38000000 -rw
+PDE(001) fac00000-fb000000 00400000 -rw
+  |-- PTE(000e0) faf00000-fafe0000 000e0000 urw
+  |-- PTE(00001) fafeb000-fafec000 00001000 -rw
+--------------------- END ---------------------
+++ setup timer interrupts
+100 ticks
+```
+
+-----
+
+- 数据结构`Page`的全局变量（其实是一个数组）的每一项与页表中的页目录项和页表项有无对应关系？如果有，其对应关系是啥
+
+  每一个`Page`对应一个物理页帧，这每一个`Page`是通过页目录项和页表项来找到的。
+
+  具体这问题啥意思我也不太懂，但是怎么找明白就行。
+
+  下面这个图或者看之前那个图
+
+[![caRZxU.jpg](https://z3.ax1x.com/2021/04/10/caRZxU.jpg)](https://imgtu.com/i/caRZxU)
+
+- 如果希望虚拟地址与物理地址相等，则需要如何修改`lab2`，完成此事？ **鼓励通过编程来具体完成这个问题**
+
+  回顾一下之前的过程，虚拟地址和物理地址为什么不相等？
+
+  因为①内核被加载到了`0xC0100000`开始的地址空间②虚拟内存空间被抬高到了高地址（`KERNBASE`）③`0-4M`的直接映射被取消
+
+  因此只需要
+
+  ①修改连接脚本，把内核起始虚拟地址修改为`0x100000`
+
+  ```
+  // tools/kernel.ld
+  /* Load the kernel at this address: "." means the current address */
+      . = 0x100000;
+  ```
+
+  ②调整`KERNBASE = 0`
+
+  ```c
+  // memlayout.h
+  /* All physical memory mapped at this address */
+  #define KERNBASE            0x00000000
+  ```
+
+  ③恢复`0-4M`的直接映射
+
+  ```c
+  // entry.S
+  # unmap va 0 ~ 4M, it's temporary mapping
+  # xorl %eax, %eax
+  # movl %eax, __boot_pgdir
+  ```
+
+  

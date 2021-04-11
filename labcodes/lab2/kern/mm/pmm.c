@@ -414,6 +414,21 @@ static inline void page_remove_pte(pde_t* pgdir, uintptr_t la, pte_t* ptep) {
 #endif
 }
 
+// 首先查看目前的页表项是否有效，查看最低为PTE_P
+if (*ptep & 0x1) {
+    // 有效就获得对应的Page结构
+    struct Page* page = pte2page(*ptep);
+    // 然后减少Page的ref位-1，并且根据返回值来判断是否应该释放这一Page
+    if (!page_ref_dec(page)) {
+        // 如果为0则释放这一Page
+        free_page(page);
+    }
+    // 清除二级页表项
+    *ptep = 0;
+    // 标记TLB中的这一Page无效
+    tlb_invalidate(pgdir, la);
+}
+
 // page_remove - free an Page which is related linear address la and has an
 // validated pte
 void page_remove(pde_t* pgdir, uintptr_t la) {
