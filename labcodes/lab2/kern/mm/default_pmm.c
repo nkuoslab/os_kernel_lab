@@ -159,6 +159,7 @@ static void default_free_pages(struct Page* base, size_t n) {
         // 如果base开始的空闲块的下一个页与p相等，即他们连上了，就进行合并
         if (base + base->property == p) {
             base->property += p->property;
+            p->property = 0;
             ClearPageProperty(p);
             list_del(&(p->page_link));
             // 如果p开始的空闲块的下一个页与base相等，也进行合并
