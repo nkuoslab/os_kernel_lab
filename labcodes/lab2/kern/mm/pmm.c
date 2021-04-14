@@ -1,4 +1,5 @@
 #include <default_pmm.h>
+#include <buddy.h>
 #include <defs.h>
 #include <error.h>
 #include <memlayout.h>
@@ -131,7 +132,7 @@ static void gdt_init(void) {
 
 // init_pmm_manager - initialize a pmm_manager instance
 static void init_pmm_manager(void) {
-    pmm_manager = &default_pmm_manager;
+    pmm_manager = &buddy_pmm_manager;
     cprintf("memory management: %s\n", pmm_manager->name);
     pmm_manager->init();
 }
@@ -474,6 +475,7 @@ void tlb_invalidate(pde_t* pgdir, uintptr_t la) {
 }
 
 static void check_alloc_page(void) {
+    cprintf("check alloc page()\n");
     pmm_manager->check();
     cprintf("check_alloc_page() succeeded!\n");
 }
