@@ -1958,8 +1958,8 @@ static void buddy_init_memmap(struct Page* base, size_t n) {
     buddy_addr = page2kva(base);
     n = 1 << ROUND_DOWN_LOG(n);
     manage_size = n;
-    free_size += n;
     buddy_size = 2 * n / 1024;
+    free_size += manage_size;
     base += buddy_size;
     manage_page = base;
     base->property = n;
@@ -2127,6 +2127,7 @@ void buddy_free(int offset) {
 total_size = 32289
 buddy_size = 32
 manage_size = 16384
+free_size = 16384
 buddy_addr = 0xc01bf000
 manage_page_addr = 0xc012156c
 -------------------------------
@@ -2155,3 +2156,6 @@ PDE(001) fac00000-fb000000 00400000 -rw
 100 ticks
 ```
 
+-----
+
+后来改进了向上取整的，但是有点bug不知道哪有问题改不对了。

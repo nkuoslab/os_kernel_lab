@@ -25,7 +25,8 @@ uint8_t ROUND_DOWN_LOG(int size) {
 // manage_size 实际可以被分配的内存大小
 // buddy_size buddy结构占据的内存大小
 // free_size 类似以前的nr_free
-unsigned total_size, manage_size, buddy_size, free_size;
+// forbid_size 被禁止的内存大小，即向上取整多出来的内存大小
+unsigned total_size, manage_size, buddy_size, free_size, forbid_size;
 // buddy_addr buddy结构的起始地址
 unsigned buddy_addr;
 // manage_page 实际可以被分配的物理内存的起始页
@@ -49,6 +50,27 @@ void buddy_new(int size) {
             node_size /= 2;
         buddy[i] = node_size;
     }
+    cprintf("buddynew\n");
+    node_size = size * 2;
+    int count = forbid_size;
+    while (node_size != 1) {
+        // cprintf("count=%d\n", count);
+        int offset = node_size - 2;
+        if (count == forbid_size) {
+            for (int i = 0; i < count; i++) {
+                buddy[offset - i] = 0;
+                // cprintf("1buddy[%d]=%d\n", offset - i, buddy[offset - i]);
+            }
+        } else {
+            for (int i = 0; i < count; i++) {
+                buddy[offset - i] = buddy[LEFT_LEAF(offset - i)] +
+                                    buddy[RIGHT_LEAF(offset - i)];
+                // cprintf("buddy[%d]=%d\n", offset - i, buddy[offset - i]);
+            }
+        }
+        count = (count + 1) / 2;
+        node_size /= 2;
+    }
 }
 
 static void buddy_init_memmap(struct Page* base, size_t n) {
@@ -61,10 +83,11 @@ static void buddy_init_memmap(struct Page* base, size_t n) {
     }
     total_size = n;
     buddy_addr = page2kva(base);
-    n = 1 << ROUND_DOWN_LOG(n);
-    manage_size = n;
+    n = 1 << (ROUND_DOWN_LOG(n) + 1);
     buddy_size = 2 * n / 1024;
-    free_size += manage_size;
+    manage_size = n;
+    forbid_size = manage_size - total_size + buddy_size;
+    free_size += total_size - buddy_size;
     base += buddy_size;
     manage_page = base;
     base->property = n;
@@ -75,6 +98,7 @@ static void buddy_init_memmap(struct Page* base, size_t n) {
     cprintf("buddy_size = %d\n", buddy_size);
     cprintf("manage_size = %d\n", manage_size);
     cprintf("free_size = %d\n", free_size);
+    cprintf("forbid_size = %d\n", forbid_size);
     cprintf("buddy_addr = 0x%08x\n", buddy_addr);
     cprintf("manage_page_addr = 0x%08x\n", manage_page);
     cprintf("-------------------------------\n");
@@ -92,7 +116,6 @@ int buddy_alloc(int size) {
 
     if (buddy[index] < size)
         return -1;
-
 
     for (node_size = manage_size; node_size != size; node_size /= 2) {
         unsigned left = buddy[LEFT_LEAF(index)];
@@ -141,7 +164,7 @@ void buddy_free(int offset) {
     unsigned node_size, index = 0;
     unsigned left_longest, right_longest;
     // cprintf("buddy free: %d\n", offset);
-
+    // cprintf("offset:%d", offset);
     assert(offset >= 0 && offset < manage_size);
 
     node_size = 1;
@@ -187,8 +210,9 @@ static size_t buddy_nr_free_pages(void) {
 }
 
 static void buddy_check(void) {
-    struct Page *p0, *A, *B, *C, *D;
+    struct Page *p0, *A, *B, *C, *D, *p1;
     p0 = A = B = C = D = NULL;
+    // cprintf("%d\n", buddy[14]);
 
     assert((p0 = alloc_page()) != NULL);
     assert((A = alloc_page()) != NULL);
@@ -201,6 +225,8 @@ static void buddy_check(void) {
     free_page(A);
     free_page(B);
 
+    p1 = alloc_pages(16384);
+
     A = alloc_pages(500);
     B = alloc_pages(500);
     cprintf("A %p\n", A);
@@ -211,7 +237,7 @@ static void buddy_check(void) {
 
     p0 = alloc_pages(8192);
     cprintf("p0 %p\n", p0);
-    assert(p0 == A);
+    assert(p0 + 14336 == A);
     // free_pages(p0, 1024);
     //以下是根据链接中的样例测试编写的
     A = alloc_pages(70);
@@ -220,18 +246,20 @@ static void buddy_check(void) {
     cprintf("B %p\n", B);
     assert(A + 128 == B);  //检查是否相邻
     C = alloc_pages(80);
-    assert(A + 256 == C);  //检查C有没有和A重叠
+    assert(C + 256 == A);  //检查C有没有和A重叠
     cprintf("C %p\n", C);
     free_pages(A, 70);  //释放A
+    // cprintf("%d\n", buddy[505]);
     D = alloc_pages(60);
     cprintf("D %p\n", D);
-    assert(B + 64 == D);  //检查B，D是否相邻
+    assert(D + 256 == B);  //检查B，D是否相邻
     free_pages(B, 35);
     cprintf("D %p\n", D);
     free_pages(D, 60);
     cprintf("C %p\n", C);
     free_pages(C, 80);
     free_pages(p0, 8192);  //全部释放
+    free_pages(p1, 16384);
 }
 
 const struct pmm_manager buddy_pmm_manager = {
