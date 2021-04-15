@@ -15,7 +15,7 @@
 
 **一定一定尽量搞懂每一行代码，尤其是看起来长的就奇怪的。（说的就是那条函数指针）（当然不要钻牛角尖，以理解大致意思为准，特别细节的肯定不用很清楚）**
 
----
+-----
 
 ## 前置工作&代码分析
 
@@ -23,7 +23,7 @@
 
 在`lab 2`中，`bootloader`的工作有所增加，增加了对于物理内存资源的探测工作（即了解物理内存是如何分布的）。探测方法是通过`BIOS`中断调用来完成的，必须在实模式下进行。
 
-BIOS 通过系统内存映射地址描述符（Address Range Descriptor）格式来表示系统物理内存布局，其具体表示如下：
+BIOS通过系统内存映射地址描述符（Address Range Descriptor）格式来表示系统物理内存布局，其具体表示如下：
 
 ```
 Offset  Size    Description
@@ -39,7 +39,7 @@ ARM    01h    memory, available to OS
 ARR    02h    reserved, not available (e.g. system ROM, memory-mapped device)
 ```
 
-通过 BIOS 中断获取内存可调用参数为 e820h 的 INT 15h BIOS 中断。
+通过BIOS中断获取内存可调用参数为e820h的INT 15h BIOS中断。
 
 参数如下：.
 
@@ -62,7 +62,7 @@ ecx：返回BIOS往ES:DI处写的地址范围描述符的字节大小
 ah：失败时保存出错代码
 ```
 
-调用中断后，BIOS 会填写好 ARD 的数据，并用`es:di`指向它，再从这里开始，每次读取 20 字节的 ARD，并保存在一个结构`e820map`中。
+调用中断后，BIOS会填写好ARD的数据，并用`es:di`指向它，再从这里开始，每次读取20字节的ARD，并保存在一个结构`e820map`中。
 
 ```c
 // memlayout.h
@@ -95,8 +95,8 @@ start_probe:
     movl $SMAP, %edx
     int $0x15						# 调用0x15中断
     jnc cont						# 检测CF，没有置位说明中断执行成功
-    movw $12345, 0x8000				# 探测有问题，结束探测
-    jmp finish_probe
+    movw $12345, 0x8000				# 探测有问题，结束探测		
+    jmp finish_probe				
 cont:
     addw $20, %di					# 设置下一个BIOS返回的映射地址描述符的起始地址
     incl 0x8000						# 递增struct e820map的成员变量nr_map
@@ -109,9 +109,9 @@ finish_probe:
 
 ### `entry.S`
 
-其次，`bootloader`不像`lab1`那样，直接调用`kern_init`函数，而是先调用位于`lab2/kern/init/entry.S`中的`kern_entry`函数。`kern_entry`函数的主要任务是为执行`kern_init`建立一个良好的 C 语言运行环境（设置堆栈），而且临时建立了一个段映射关系，为之后建立分页机制的过程做一个准备（细节在 3.5 小节有进一步阐述）。完成这些工作后，才调用`kern_init`函数。
+其次，`bootloader`不像`lab1`那样，直接调用`kern_init`函数，而是先调用位于`lab2/kern/init/entry.S`中的`kern_entry`函数。`kern_entry`函数的主要任务是为执行`kern_init`建立一个良好的C语言运行环境（设置堆栈），而且临时建立了一个段映射关系，为之后建立分页机制的过程做一个准备（细节在3.5小节有进一步阐述）。完成这些工作后，才调用`kern_init`函数。
 
-_这里包括下面`pmm_init`的主要作用，所给的指导书内容与代码是不一致的（代码发生了改动而指导书并未做对应的改动）。这里`entry.S`不仅建立了内核栈而且设立了临时页表后又取消 0-4M 的对等映射，相当于以前在`pmm_init`中完成的一些功能，现在提前到这里去实现了。改动链接：https://github.com/chyyuu/os_kernel_lab/commit/07a95c0a5f30bebdf7ee459cfe996004b0773899#diff-819506afdc296bb942a41cc290d314ad92b16336cd228e92601dca0ab9b90b43_
+*这里包括下面`pmm_init`的主要作用，所给的指导书内容与代码是不一致的（代码发生了改动而指导书并未做对应的改动）。这里`entry.S`不仅建立了内核栈而且设立了临时页表后又取消0-4M的对等映射，相当于以前在`pmm_init`中完成的一些功能，现在提前到这里去实现了。改动链接：https://github.com/chyyuu/os_kernel_lab/commit/07a95c0a5f30bebdf7ee459cfe996004b0773899#diff-819506afdc296bb942a41cc290d314ad92b16336cd228e92601dca0ab9b90b43*
 
 ```assembly
 #define REALLOC(x) (x - KERNBASE)
@@ -121,7 +121,7 @@ _这里包括下面`pmm_init`的主要作用，所给的指导书内容与代码
 
 kern_entry:									# 内核入口点
     # load pa of boot pgdir
-    movl $REALLOC(__boot_pgdir), %eax		# 这里使用的是物理地址，因为页表映射还没开
+    movl $REALLOC(__boot_pgdir), %eax		# 这里使用的是物理地址，因为页表映射还没开 
     movl %eax, %cr3							# 将临时页表，存到CR3中。
     										# CR3中含有页目录表物理内存基地址，因此该寄存器也被称为页目录基址寄存器PDBR
 
@@ -130,7 +130,7 @@ kern_entry:									# 内核入口点
     orl $(CR0_PE | CR0_PG | CR0_AM | CR0_WP | CR0_NE | CR0_TS | CR0_EM | CR0_MP), %eax
     andl $~(CR0_TS | CR0_EM), %eax			# 取消的两位与协处理器相关，至于为什么先置位又取消，并不是很懂
     movl %eax, %cr0							# 此时CR0.PE(第0位)已经置1，保护模式开启;CR0.PG(第31位)也置1，页机制开启，页表地址为__boot_pgdir
-
+    
     #此时内核仍然运行在0-4M的空间上，但是内核要运行的虚拟地址在高地址，因此更新eip
 
     # update eip
@@ -149,7 +149,7 @@ kern_entry:									# 内核入口点
 +-------------------------------------------------------------------------------+
 ```
 
-每一个二级页表项大小为 4K，可以映射 4MB 的物理内存。
+每一个二级页表项大小为4K，可以映射4MB的物理内存。
 
 ```assembly
 # kernel builtin pgdir
@@ -186,9 +186,9 @@ __boot_pt1:
 
 [![cKjFBR.png](https://z3.ax1x.com/2021/04/04/cKjFBR.png)](https://imgtu.com/i/cKjFBR)
 
--   为什么要这样映射？
+- 为什么要这样映射？
 
-    前面也说了，内核运行在`0-4M`的低地址，为了保证分页机制开启后内核能正常运行，因此要添加`Virtual Address = Linear Address = Phisical Address(0-4M)`的映射关系。
+  前面也说了，内核运行在`0-4M`的低地址，为了保证分页机制开启后内核能正常运行，因此要添加`Virtual Address = Linear Address = Phisical Address(0-4M)`的映射关系。
 
 之后移动`eip`到高虚拟地址，然后就取消了上面的映射，此时就只有`Address = Linear Address = 0xC0000000 + Phisical Address(0-4M)`的映射关系
 
@@ -211,18 +211,18 @@ spin:
     jmp spin
 ```
 
--   为什么内核运行在 0-4M 的地址空间？：
+- 为什么内核运行在0-4M的地址空间？：
 
-    在`tools/kernel.ld`中定义了内核的起始地址
+  在`tools/kernel.ld`中定义了内核的起始地址
 
-    ```
-    /* Load the kernel at this address: "." means the current address */
-        . = 0xC0100000;
-    ```
+  ```
+  /* Load the kernel at this address: "." means the current address */
+      . = 0xC0100000;
+  ```
 
-    这是一个虚拟地址，但由于内核加载时，页表映射还没有开，虚拟地址=物理地址，但是`bootloader`把`ucore`放在了起始物理地址为`0x100000`的物理内存空间，因此在跳转时，地址与`0xFFFFFF`做与手动做一个映射。
+  这是一个虚拟地址，但由于内核加载时，页表映射还没有开，虚拟地址=物理地址，但是`bootloader`把`ucore`放在了起始物理地址为`0x100000`的物理内存空间，因此在跳转时，地址与`0xFFFFFF`做与手动做一个映射。
 
----
+-----
 
 ### `pmm.c & pmm.h`
 
@@ -230,11 +230,11 @@ spin:
 
 进入`kern_init`后便会执行`pmm_init()`完成物理内存的管理。它完成的主要工作有
 
-_前面也提到了，一些工作移到了`entry.S`中，即 4 和 8_
+*前面也提到了，一些工作移到了`entry.S`中，即4和8*
 
 1. 初始化物理内存页管理器框架`pmm_manager`；
 2. 建立空闲的`page`链表，这样就可以分配以页（4KB）为单位的空闲内存了；
-3.
+3. 
 4. 检查物理内存页分配算法；
 5. 为确保切换到分页机制后，代码能够正常执行，先建立一个临时二级页表；
 6. 建立一一映射关系的二级页表；
@@ -247,19 +247,19 @@ _前面也提到了，一些工作移到了`entry.S`中，即 4 和 8_
 ```c
 //pmm.c
 
-//pmm_init - setup a pmm to manage physical memory, build PDT&PT to setup paging mechanism
+//pmm_init - setup a pmm to manage physical memory, build PDT&PT to setup paging mechanism 
 //         - check the correctness of pmm & paging mechanism, print PDT&PT
 void
 pmm_init(void) {
-
+    
     // We've already enabled paging
     // 此时已经开启了页机制，由于boot_pgdir是内核页表地址的虚拟地址。通过PADDR宏转化为boot_cr3物理地址，供后续使用
     boot_cr3 = PADDR(boot_pgdir);
 
-    //We need to alloc/free the physical memory (granularity is 4KB or other size).
+    //We need to alloc/free the physical memory (granularity is 4KB or other size). 
     //So a framework of physical memory manager (struct pmm_manager)is defined in pmm.h
     //First we should init a physical memory manager(pmm) based on the framework.
-    //Then pmm can alloc/free the physical memory.
+    //Then pmm can alloc/free the physical memory. 
     //Now the first_fit/best_fit/worst_fit/buddy_system pmm are available.
 
     // 初始化物理内存管理器
@@ -340,37 +340,36 @@ uintptr_t boot_cr3;
 
 `pmm_init`在得到了内核页目录表的物理地址(`boot_cr3`)后，便通过`init_pmm_manager`函数初始化了物理内存管理器。这是一个用于表达物理内存管理行为的函数指针集合，内核启动时会对这一函数指针集合进行赋值。
 
-可以理解为这是 C 语言的面向对象的结构，只用修改对应函数指针便可以不改变其他逻辑完成修改。
+可以理解为这是C语言的面向对象的结构，只用修改对应函数指针便可以不改变其他逻辑完成修改。
 
-> 先介绍下函数指针
+>  先介绍下函数指针
 >
-> 函数本身也是有地址的，因此也就可以有一个指针指向这个函数，如果知道函数的具体类型，就可以通过这个地址来调用这个函数。
+>  函数本身也是有地址的，因此也就可以有一个指针指向这个函数，如果知道函数的具体类型，就可以通过这个地址来调用这个函数。
 >
-> 返回值类型 (\*函数指针名)（参数 1，参数 2，...）
+>  返回值类型 (*函数指针名)（参数1，参数2，...）
 >
-> `int (*fun_ptr)(int,int)`
+>  `int (*fun_ptr)(int,int)`
 >
-> `void (*funP)(int)`
+>  `void (*funP)(int)`
 >
-> 最面前的是函数的返回值类型，括号中是名字，最后面括号是参数表
+>  最面前的是函数的返回值类型，括号中是名字，最后面括号是参数表
 >
-> 调用时，直接`函数指针名()`即可。
+>  调用时，直接`函数指针名()`即可。
 >
-> ---
+>  -----
 >
-> 再解释下 lab1 中的那个函数指针
+>  再解释下lab1中的那个函数指针
 >
-> `((void (*)(void))(ELFHDR->e_entry & 0xFFFFFF))()`
+>  `((void (*)(void))(ELFHDR->e_entry & 0xFFFFFF))()`
 >
-> -   为什么这个这么长？
+>  - 为什么这个这么长？
+>    - 因为它本身只是一个地址，首先强制类型转换成函数指针才能调用
 >
->     -   因为它本身只是一个地址，首先强制类型转换成函数指针才能调用
->
-> -   具体结构解析
->     -   先看最右边（）是函数调用的括号，无参数。
->     -   左边整体括号表明这是一个整体，与优先级相关。
->     -   `(void (*)(void))`外侧括号是强制类型转换的括号，类比`(int)(3.0)`，同理`(ELFHDR->e_entry & 0xFFFFFF)`的括号。
->     -   再看类型`void (*)(void)`，类比`int`，这是这个函数指针的类型，具体是没有参数也没有返回值的函数指针。
+>  - 具体结构解析
+>    - 先看最右边（）是函数调用的括号，无参数。
+>    - 左边整体括号表明这是一个整体，与优先级相关。
+>    - `(void (*)(void))`外侧括号是强制类型转换的括号，类比`(int)(3.0)`，同理`(ELFHDR->e_entry & 0xFFFFFF)`的括号。
+>    - 再看类型`void (*)(void)`，类比`int`，这是这个函数指针的类型，具体是没有参数也没有返回值的函数指针。
 
 首先看`pmm_manager`的结构。
 
@@ -382,15 +381,15 @@ uintptr_t boot_cr3;
 // by ucore to manage the total physical memory space.
 struct pmm_manager {
     const char *name;                                 // XXX_pmm_manager's name
-    void (*init)(void);                               // initialize internal description&management data structure (free block list, number of free block) of XXX_pmm_manager
-    void (*init_memmap)(struct Page *base, size_t n); // setup description&management data structcure according to the initial free physical memory space
+    void (*init)(void);                               // initialize internal description&management data structure (free block list, number of free block) of XXX_pmm_manager 
+    void (*init_memmap)(struct Page *base, size_t n); // setup description&management data structcure according to the initial free physical memory space 
     												  // 设置可管理的内存,初始化可分配的物理内存空间，初始化管理空闲内存页的数据结构
-    struct Page *(*alloc_pages)(size_t n);            // allocate >=n pages, depend on the allocation algorithm
+    struct Page *(*alloc_pages)(size_t n);            // allocate >=n pages, depend on the allocation algorithm 
     												  // 分配>=N个连续物理页,返回分配块首地址指针
     void (*free_pages)(struct Page *base, size_t n);  // free >=n pages with "base" addr of Page descriptor structures(memlayout.h)
     												  // 释放包括自Base基址在内的，起始的>=N个连续物理内存页
-    size_t (*nr_free_pages)(void);                    // return the number of free pages
-    void (*check)(void);                              // check the correctness of XXX_pmm_manager
+    size_t (*nr_free_pages)(void);                    // return the number of free pages 
+    void (*check)(void);                              // check the correctness of XXX_pmm_manager 
 };
 ```
 
@@ -412,11 +411,11 @@ init_pmm_manager(void) {
 }
 ```
 
-具体`default_pmm_manager`后面练习 1 再看。
+具体`default_pmm_manager`后面练习1再看。
 
 ##### `page_init()`
 
-通过`pmm_manager`获得可用物理内存范围后，`ucore`使用`Page`来管理物理页（按 4KB 对齐，且大小为 4KB 的物理内存单元）。由于一个物理页需要占用一个`Page`结构的空间，`Page`结构在设计时须尽可能小，以减少对内存的占用。
+通过`pmm_manager`获得可用物理内存范围后，`ucore`使用`Page`来管理物理页（按4KB对齐，且大小为4KB的物理内存单元）。由于一个物理页需要占用一个`Page`结构的空间，`Page`结构在设计时须尽可能小，以减少对内存的占用。
 
 首先看`Page`结构：
 
@@ -443,7 +442,7 @@ struct Page {
 关于这个`list_entry_t`：
 
 ```c
-//list.h
+//list.h 
 
 struct list_entry {
     struct list_entry *prev, *next;
@@ -551,7 +550,7 @@ page_init(void) {
 }
 ```
 
-最后一行中`pa2page`定义在`pmm.h`中，就是根据物理地址，返回对应`Page`的指针，索引就是物理地址的前 20 位。
+最后一行中`pa2page`定义在`pmm.h`中，就是根据物理地址，返回对应`Page`的指针，索引就是物理地址的前20位。
 
 ```c
 static inline struct Page *
@@ -582,15 +581,15 @@ pa2page(uintptr_t pa) {
 
 [<img src="https://z3.ax1x.com/2021/04/07/cGWNwV.png" alt="cGWNwV.png" style="zoom: 150%;" />](https://imgtu.com/i/cGWNwV)
 
----
+-----
 
-后面的过程需要练习 123 的代码，所以先做练习，之后再继续分析。
+后面的过程需要练习123的代码，所以先做练习，之后再继续分析。
 
-## 练习 1：**实现`first-fit`连续物理内存分配算法**
+## 练习1：**实现` first-fit `连续物理内存分配算法**
 
 ### 准备工作
 
-下面进入练习 1，实现`first-fit`连续物理内存分配算法。
+下面进入练习1，实现`first-fit`连续物理内存分配算法。
 
 首先分析`default_pmm_manager`，因为实现`first-fit`就是要重写其中的几个函数：`default_init`，`default_init_memmap`，`default_alloc_pages`，`default_free_pages`。
 
@@ -603,7 +602,7 @@ pa2page(uintptr_t pa) {
 关于这个`list_entry_t`：
 
 ```c
-//list.h
+//list.h 
 
 struct list_entry {
     struct list_entry *prev, *next;
@@ -637,7 +636,7 @@ void list_del(list_entry_t *listelm)							 // 删除listelm
 void list_del(list_entry_t *listelm)							 // 删除listelm并初始化链表
 bool list_empty(list_entry_t *list) 							 // 判断链表是否空
 list_entry_t *list_next(list_entry_t *listelm)					 // 下一个元素
-list_entry_t *list_prev(list_entry_t *listelm)					 // 上一个元素
+list_entry_t *list_prev(list_entry_t *listelm)					 // 上一个元素 
 ```
 
 还有一个问题就是，由于是数据里保存链表指针，但我们只能获取链表指针，怎么获取到数据。`ucore`提供宏`le2page`，传入链表指针`le`与结构体变量名`member`即可得到对应的`page`指针。
@@ -669,17 +668,17 @@ list_entry_t *list_prev(list_entry_t *listelm)					 // 上一个元素
 
 > 题外话：
 >
-> 联系 Lab1 中的 ELFHDR 等文件头，所有文件的格式也是这样，一些数据连续排列构成文件。但是为了解析出这些数据，就需要在保存一下这些数据的排列方式，因此就需要有文件头。文件头就是文件的真正数据前的一些数据，保存了后面的数据的排列方式。因此读取文件需要先读文件头，再根据文件头来读取后面的数据。
+> 联系Lab1中的ELFHDR等文件头，所有文件的格式也是这样，一些数据连续排列构成文件。但是为了解析出这些数据，就需要在保存一下这些数据的排列方式，因此就需要有文件头。文件头就是文件的真正数据前的一些数据，保存了后面的数据的排列方式。因此读取文件需要先读文件头，再根据文件头来读取后面的数据。
 
 其次，看代码。`offsetof(type, member)`接受一个结构体类型`type`和结构体中一个变量`member`，返回`member`变量到结构体头部的地址。
 
-具体原理：首先构造一个`type*`，其指向的地址是 0，然后获取得到其`member`变量`((type *)0)->member`，之后通过`&`取其地址，再减去结构体起始地址 0，就得到了地址差。再转换成`size_t`（即`unsigned int`）类型即可。
+具体原理：首先构造一个`type*`，其指向的地址是0，然后获取得到其`member`变量`((type *)0)->member`，之后通过`&`取其地址，再减去结构体起始地址0，就得到了地址差。再转换成`size_t`（即`unsigned int`）类型即可。
 
 `to_struct(ptr, type, member)`接受链表指针`ptr`，从指针指向的地址向前移动，移动距离即为结构体中链表指针与结构体头的差，用`offsetof`得到。再把其类型转换为对应的结构体类型即可。
 
 [![cQl7lT.png](https://z3.ax1x.com/2021/04/05/cQl7lT.png)](https://imgtu.com/i/cQl7lT)
 
----
+-----
 
 准备工作就做完了，下面开始具体修改函数代码。
 
@@ -709,15 +708,16 @@ kern_init ==> pmm_init ==> page_init ==> init_memmap ==> pmm_manager->init_memma
 >
 > 首先你需要初始化每一个页，步骤如下：
 >
-> -   把`Page`中的`eflags`的`PG_property`位置位。
+> - 把`Page`中的`eflags`的`PG_property`位置位。
 >
->     `PG_property`如果是 1，那么这个`Page`是一个连续空闲块的第一个页，可以用于分配；如果为 0，并且是第一个块，说明被占用，不能分配，否则不是第一个块。
+>   `PG_property`如果是1，那么这个`Page`是一个连续空闲块的第一个页，可以用于分配；如果为0，并且是第一个块，说明被占用，不能分配，否则不是第一个块。
 >
->     另一个标志位`PG_reserved`已经在`page_init`中被置位了。
+>   另一个标志位`PG_reserved`已经在`page_init`中被置位了。
 >
-> -   设置`Page`的`property`。在`first-fit`中，第一页为页的个数，余下页为 0。
+> - 设置`Page`的`property`。在`first-fit`中，第一页为页的个数，余下页为0。
 >
-> -   `Page`的`ref`置 0，因为目前是空闲态，没有被引用。
+> - `Page`的`ref`置0，因为目前是空闲态，没有被引用。
+>
 
 然后把`Page`的`page_link`连接到`free_list`中，再更新`free_area`的`nr_free`。
 
@@ -911,9 +911,9 @@ static void default_free_pages(struct Page* base, size_t n) {
 
 上面代码中，链表的查找和插入都需要遍历整个链表，比较耗时。改进可以采用树型结构，或者改进一下空闲块的结构，使得第一页和最后一页均有标记。
 
----
+-----
 
-至此练习 1 就完成了，`default_pmm_manager`函数还有两个函数，一个返回`nr_free`，一个做检查便不再解释了。
+至此练习1就完成了，`default_pmm_manager`函数还有两个函数，一个返回`nr_free`，一个做检查便不再解释了。
 
 此时可以`make qemu`执行`pmm_init`中的`check_alloc_page`去调用`pmm_check`检验我们的`first_fit`算法了，这也是`pmm_init`的工作之一。
 
@@ -923,39 +923,38 @@ static void default_free_pages(struct Page* base, size_t n) {
 
 最上方首先打印出由`BIOS 0x15`中断探测物理内存得到的`e820map`，然后便是`check_alloc_page() succeed!`，表明`first_fit`实现无错误。
 
----
+-----
 
-## 练习 2：实现寻找虚拟地址对应的页表项
+## 练习2：实现寻找虚拟地址对应的页表项
 
 通过设置页表和对应的页表项，可建立虚拟内存地址和物理内存地址的对应关系。其中的` get_pte` 函数是设置页表项环节中的一个重要步骤。此函数找到一个虚地址对应的二级页表项的内核虚地址，如果此二级页表项不存在，则分配一个包含此项的二级页表。本练习需要补全`get_pte`函数` in kern/mm/pmm.c` ，实现其功能。
 
----
+-----
 
 [<img src="https://z3.ax1x.com/2021/04/07/cGWWFO.png" alt="cGWWFO.png" style="zoom:150%;" />](https://imgtu.com/i/cGWWFO)
 
 在保护模式中，x86 体系结构将内存地址分成三种：逻辑地址（也称虚地址）、线性地址和物理地址。逻辑地址即是程序指令中使用的地址，物理地址是实际访问内存的地址。逻辑地址通过段式管理的地址映射可以得到线性地址，线性地址通过页式管理的地址映射得到物理地址。
 
-在`ucore`中段式管理只起到了一个过渡作用，它将逻辑地址不加转换直接映射成线性地址。
+在` ucore `中段式管理只起到了一个过渡作用，它将逻辑地址不加转换直接映射成线性地址。
 
----
+-----
 
--   `PTE`：`Page Table Entry` 页表项，每一个页表项对应一个物理页，每一个二级页表有 1024 个页表项。
+- `PTE`：`Page Table Entry` 页表项，每一个页表项对应一个物理页，每一个二级页表有1024个页表项。
+- `PDE`：`Page Directory Entry`页目录项，每一个页目录项对应一个二级页表，每一个一级页表（页目录表）有1024个页目录项。
 
--   `PDE`：`Page Directory Entry`页目录项，每一个页目录项对应一个二级页表，每一个一级页表（页目录表）有 1024 个页目录项。
+- `pte_t *get_pte(pde_t *pgdir, uintptr_t la, bool create)`
 
--   `pte_t *get_pte(pde_t *pgdir, uintptr_t la, bool create)`
+  其中三个类型`pte_t`、`pde_t`、`uintptr_t`，都为`unsigned int`。
 
-    其中三个类型`pte_t`、`pde_t`、`uintptr_t`，都为`unsigned int`。
+  - `pde_t`全称为 `page directory entry`，也就是一级页表的表项（注意：`pgdir`实际不是表项，而是一级页表本身。实际上应该新定义一个类型`pgd_t`来表示一级页表本身）
+  - `pte_t`全称为 `page table entry`，表示二级页表的表项。
+  - `uintptr_t`表示为线性地址，由于段式管理只做直接映射，所以它也是逻辑地址。
 
-    -   `pde_t`全称为 `page directory entry`，也就是一级页表的表项（注意：`pgdir`实际不是表项，而是一级页表本身。实际上应该新定义一个类型`pgd_t`来表示一级页表本身）
-    -   `pte_t`全称为 `page table entry`，表示二级页表的表项。
-    -   `uintptr_t`表示为线性地址，由于段式管理只做直接映射，所以它也是逻辑地址。
+  如果在查找二级页表项时，发现对应的二级页表不存在，则需要根据`create`参数的值来处理是否创建新的二级页表。如果`create`参数为0，则`get_pte`返回`NULL`；如果`create`参数不为0，则`get_pte`需要申请一个新的物理页，再在一级页表中添加页目录项指向表示二级页表的新物理页。注意，新申请的页必须全部设定为零，因为这个页所代表的虚拟地址都没有被映射。
 
-    如果在查找二级页表项时，发现对应的二级页表不存在，则需要根据`create`参数的值来处理是否创建新的二级页表。如果`create`参数为 0，则`get_pte`返回`NULL`；如果`create`参数不为 0，则`get_pte`需要申请一个新的物理页，再在一级页表中添加页目录项指向表示二级页表的新物理页。注意，新申请的页必须全部设定为零，因为这个页所代表的虚拟地址都没有被映射。
+  当建立从一级页表到二级页表的映射时，需要注意设置控制位。这里应该设置同时设置上`PTE_U`、`PTE_W`和`PTE_P`。如果原来就有二级页表，或者新建立了页表，则只需返回对应项的地址即可。
 
-    当建立从一级页表到二级页表的映射时，需要注意设置控制位。这里应该设置同时设置上`PTE_U`、`PTE_W`和`PTE_P`。如果原来就有二级页表，或者新建立了页表，则只需返回对应项的地址即可。
-
-    只有当一级二级页表的项都设置了用户写权限后，用户才能对对应的物理地址进行读写。所以我们可以在一级页表先给用户写权限，再在二级页表上面根据需要限制用户的权限，对物理页进行保护。
+  只有当一级二级页表的项都设置了用户写权限后，用户才能对对应的物理地址进行读写。所以我们可以在一级页表先给用户写权限，再在二级页表上面根据需要限制用户的权限，对物理页进行保护。
 
 了解了功能和一些细节之后，开始写代码。
 
@@ -1027,52 +1026,52 @@ pte_t* get_pte(pde_t* pgdir, uintptr_t la, bool create) {
 
 > 最后一行解析
 >
-> -   `&(((pte_t*)KADDR(*pdep & ~0xfff))[PTX(la)])`&(...) 取地址，因为返回的是`pte`的指针，括号内就是要的`pte`
-> -   `((pte_t*)KADDR(*pdep & ~0xfff))[PTX(la)]` 右侧`[PTX(la)]`数组下标，`PTX(la)`是返回`la`在对应二级页表中的下标，其实就是中间十位。
-> -   `((pte_t*)KADDR(*pdep & ~0xfff))`外侧括号表明是个整体，是一个数组
-> -   `(pte_t*)KADDR(*pdep & ~0xfff)`左侧`(pre_t*)`把右边这个地址转换成`pte_t`的指针，从而可以用数组方式访问
-> -   `KADDR(*pdep & ~0xfff)` `KADDR()`把物理地址转换成内核虚拟地址
-> -   `*pdep & ~0xfff*` `*pdep*`是页目录项的内容，去除后十二位标志，得到对应二级页表的起始地址
+> - `&(((pte_t*)KADDR(*pdep & ~0xfff))[PTX(la)])`&(...) 取地址，因为返回的是`pte`的指针，括号内就是要的`pte`
+> - `((pte_t*)KADDR(*pdep & ~0xfff))[PTX(la)]` 右侧`[PTX(la)]`数组下标，`PTX(la)`是返回`la`在对应二级页表中的下标，其实就是中间十位。
+> - `((pte_t*)KADDR(*pdep & ~0xfff))`外侧括号表明是个整体，是一个数组
+> - `(pte_t*)KADDR(*pdep & ~0xfff)`左侧`(pre_t*)`把右边这个地址转换成`pte_t`的指针，从而可以用数组方式访问
+> - `KADDR(*pdep & ~0xfff)` `KADDR()`把物理地址转换成内核虚拟地址
+> - `*pdep & ~0xfff*` `*pdep*`是页目录项的内容，去除后十二位标志，得到对应二级页表的起始地址
 
----
+-----
 
--   请描述页目录项（`Page Directory Entry`）和页表项（`Page Table Entry`）中每个组成部分的含义以及对`ucore`而言的潜在用处。
+- 请描述页目录项（`Page Directory Entry`）和页表项（`Page Table Entry`）中每个组成部分的含义以及对`ucore`而言的潜在用处。
 
-    -   `PDE`
+  - `PDE`
 
-        [![cYn1Wn.png](https://z3.ax1x.com/2021/04/08/cYn1Wn.png)](https://imgtu.com/i/cYn1Wn)
+    [![cYn1Wn.png](https://z3.ax1x.com/2021/04/08/cYn1Wn.png)](https://imgtu.com/i/cYn1Wn)
 
-        -   P (`Present`) 位：表示该页保存在物理内存中（1），或者不在（0）。
-        -   R/W (`Read/Write`) 位：表示该页只读/可读可写。
-        -   U/S (`User/Superviosr `) 位：表示该页可以被任何权限用户/超级用户访问。
-        -   WT (`Write Through`) 位：写直达/写回。
-        -   CD (`Cache Disable`) 位：`Cache`缓存禁止（1）/开启（0）
-        -   A (`Access`) 位：表示该页被写过。
-        -   PS (`Size`) 位：表示一个页 4MB(1)/4KB(0) 。
-        -   G（`global`位）：表示是否将虚拟地址与物理地址的转换结果缓存到 `TLB `中。
-        -   Avail： 9-11 位保留给 OS 使用。
-        -   12-31 位： `PTE` 基址的高 20 位（由于按页对齐，后 12 位均为 0）。
+    - P (`Present`) 位：表示该页保存在物理内存中（1），或者不在（0）。
+    - R/W (`Read/Write`) 位：表示该页只读/可读可写。
+    - U/S (`User/Superviosr `) 位：表示该页可以被任何权限用户/超级用户访问。
+    - WT (`Write Through`) 位：写直达/写回。
+    - CD (`Cache Disable`) 位：`Cache`缓存禁止（1）/开启（0）
+    - A (`Access`) 位：表示该页被写过。
+    - PS (`Size`) 位：表示一个页 4MB(1)/4KB(0) 。
+    - G（`global`位）：表示是否将虚拟地址与物理地址的转换结果缓存到 `TLB `中。
+    - Avail： 9-11 位保留给 OS 使用。
+    - 12-31 位： `PTE` 基址的高20位（由于按页对齐，后12位均为0）。
 
-    -   `PTE`
+  - `PTE`
 
-        [![cYQ3AU.png](https://z3.ax1x.com/2021/04/08/cYQ3AU.png)](https://imgtu.com/i/cYQ3AU)
+    [![cYQ3AU.png](https://z3.ax1x.com/2021/04/08/cYQ3AU.png)](https://imgtu.com/i/cYQ3AU)
 
-        -   D(`Dirty`)位：脏位。
-        -   12-31 位： 页基址的高 20 位（由于按页对齐，后 12 位均为 0）。
+    - D(`Dirty`)位：脏位。
+    - 12-31 位： 页基址的高20位（由于按页对齐，后12位均为0）。
 
-    -   高 20 位保存对应二级页表/页的高二十位地址，低 12 位保存一些标志位。
+  - 高20位保存对应二级页表/页的高二十位地址，低12位保存一些标志位。
 
--   如果`ucore`执行过程中访问内存，出现了页访问异常，请问硬件要做哪些事情？
+- 如果`ucore`执行过程中访问内存，出现了页访问异常，请问硬件要做哪些事情？
 
-    会触发缺页异常， CPU 将产生页访问异常的线性地址放到 cr2 寄存器中，然后触发异常，由异常处理程序根缺页异常类型来进行不同处理，如从磁盘中读取出内存页等。
+  会触发缺页异常， CPU 将产生页访问异常的线性地址放到 cr2 寄存器中，然后触发异常，由异常处理程序根缺页异常类型来进行不同处理，如从磁盘中读取出内存页等。
 
----
+-----
 
-## 练习 3：释放某虚地址所在的页并取消对应二级页表项的映射
+## 练习3：释放某虚地址所在的页并取消对应二级页表项的映射
 
 当释放一个包含某虚地址的物理内存页时，需要让对应此物理内存页的管理数据结构`Page`做相关的清除处理，使得此物理内存页成为空闲；另外还需把表示虚地址与物理地址对应关系的二级页表项清除。
 
----
+-----
 
 用到的一些宏/函数
 
@@ -1157,52 +1156,52 @@ PDE(001) fac00000-fb000000 00400000 -rw
 100 ticks
 ```
 
----
+-----
 
--   数据结构`Page`的全局变量（其实是一个数组）的每一项与页表中的页目录项和页表项有无对应关系？如果有，其对应关系是啥
+- 数据结构`Page`的全局变量（其实是一个数组）的每一项与页表中的页目录项和页表项有无对应关系？如果有，其对应关系是啥
 
-    每一个`Page`对应一个物理页帧，这每一个`Page`是通过页目录项和页表项来找到的。
+  每一个`Page`对应一个物理页帧，这每一个`Page`是通过页目录项和页表项来找到的。
 
-    具体这问题啥意思我也不太懂，但是怎么找明白就行。
+  具体这问题啥意思我也不太懂，但是怎么找明白就行。
 
-    [<img src="https://z3.ax1x.com/2021/04/11/cwLvbn.png" alt="cwLvbn.png" style="zoom:150%;" />](https://imgtu.com/i/cwLvbn)
+  [<img src="https://z3.ax1x.com/2021/04/11/cwLvbn.png" alt="cwLvbn.png" style="zoom:150%;" />](https://imgtu.com/i/cwLvbn)
+  
+- 如果希望虚拟地址与物理地址相等，则需要如何修改`lab2`，完成此事？ **鼓励通过编程来具体完成这个问题**
 
--   如果希望虚拟地址与物理地址相等，则需要如何修改`lab2`，完成此事？ **鼓励通过编程来具体完成这个问题**
+  回顾一下之前的过程，虚拟地址和物理地址为什么不相等？
 
-    回顾一下之前的过程，虚拟地址和物理地址为什么不相等？
+  因为①内核被加载到了`0xC0100000`开始的地址空间②虚拟内存空间被抬高到了高地址（`KERNBASE`）③`0-4M`的直接映射被取消
 
-    因为 ① 内核被加载到了`0xC0100000`开始的地址空间 ② 虚拟内存空间被抬高到了高地址（`KERNBASE`）③`0-4M`的直接映射被取消
+  因此只需要
 
-    因此只需要
+  ①修改连接脚本，把内核起始虚拟地址修改为`0x100000`
 
-    ① 修改连接脚本，把内核起始虚拟地址修改为`0x100000`
+  ```
+  // tools/kernel.ld
+  /* Load the kernel at this address: "." means the current address */
+      . = 0x100000;
+  ```
 
-    ```
-    // tools/kernel.ld
-    /* Load the kernel at this address: "." means the current address */
-        . = 0x100000;
-    ```
+  ②调整`KERNBASE = 0`
 
-    ② 调整`KERNBASE = 0`
+  ```c
+  // memlayout.h
+  /* All physical memory mapped at this address */
+  #define KERNBASE            0x00000000
+  ```
 
-    ```c
-    // memlayout.h
-    /* All physical memory mapped at this address */
-    #define KERNBASE            0x00000000
-    ```
+  ③恢复`0-4M`的直接映射
 
-    ③ 恢复`0-4M`的直接映射
+  ```c
+  // entry.S
+  # unmap va 0 ~ 4M, it's temporary mapping
+  # xorl %eax, %eax
+  # movl %eax, __boot_pgdir
+  ```
+  
+  ④`check...`函数中有很多对于`pgdir[0]`的检查，应该注释掉
 
-    ```c
-    // entry.S
-    # unmap va 0 ~ 4M, it's temporary mapping
-    # xorl %eax, %eax
-    # movl %eax, __boot_pgdir
-    ```
-
-    ④`check...`函数中有很多对于`pgdir[0]`的检查，应该注释掉
-
----
+------
 
 ## 代码分析
 
@@ -1210,7 +1209,7 @@ PDE(001) fac00000-fb000000 00400000 -rw
 
 继续前面没分析完的`pmm_init`函数。
 
----
+-----
 
 ##### `check_alloc_page()`
 
@@ -1225,13 +1224,13 @@ static void check_alloc_page(void) {
 }
 ```
 
----
+-----
 
 ##### `check_pgdir()`
 
-检查页目录表和页表，主要也是通过分配和释放来检测`PTE`是否正常，完成的是对练习 2 和练习 3 的检查。具体过程也不再叙述。
+检查页目录表和页表，主要也是通过分配和释放来检测`PTE`是否正常，完成的是对练习2和练习3的检查。具体过程也不再叙述。
 
----
+-----
 
 ##### `static_assert(KERNBASE % PTSIZE == 0 && KERNTOP % PTSIZE == 0)`
 
@@ -1239,7 +1238,7 @@ static void check_alloc_page(void) {
 
 这里检测两个定义好的常量，具体意义不是很清楚，应该是为了下面内核页表的自映射。
 
----
+-----
 
 ##### `boot_pgdir[PDX(VPT)] = PADDR(boot_pgdir) | PTE_P | PTE_W`
 
@@ -1253,15 +1252,15 @@ static void check_alloc_page(void) {
 
 所有页表位于连续内存，也就是说所有页表可以存储在一个`Table Frame`中。
 
-下面，假设所有页表就存储在`Table Frame x `中，那么这个`Table Frame x`存储着 1024 个`4KB`的页表（`Table 0`、`Table 1`、...、`Table 1023`），其中每个页表对应一个`Table Frame`，也就是说`Table x`就对应`Table Frame x`。
+下面，假设所有页表就存储在`Table Frame x `中，那么这个`Table Frame x`存储着1024个`4KB`的页表（`Table 0`、`Table 1`、...、`Table 1023`），其中每个页表对应一个`Table Frame`，也就是说`Table x`就对应`Table Frame x`。
 
 页目录表中每个`PDE`，指向对应的一个页表`Table`。
 
-`Table x`有 1024 个`PTE`，每个`PTE`对应一个`Page`（也就是`Table Frame x`中的对应`Page`），`Page`实质上就是页表中的`Table`。
+`Table x`有1024个`PTE`，每个`PTE`对应一个`Page`（也就是`Table Frame x`中的对应`Page`），`Page`实质上就是页表中的`Table`。
 
 因此`Table x`指向了页表，和页目录的作用一样，因此就可以用`Table x`来代替页目录表。
 
----
+-----
 
 下面解读这行代码`boot_pgdir[PDX(VPT)] = PADDR(boot_pgdir) | PTE_P | PTE_W`
 
@@ -1284,18 +1283,18 @@ static void check_alloc_page(void) {
 
 然后设置其值为页目录表的地址，这里注意是物理地址。
 
----
+-----
 
 ##### `boot_map_segment(boot_pgdir, KERNBASE, KMEMSIZE, 0, PTE_W)`
 
 将内核所占用的物理内存，进行页表<=>物理页的映射。令处于高位虚拟内存空间的内核，正确的映射到低位的物理内存空间。
 
-映射关系(虚实映射): 内核起始虚拟地址(`KERNBASE`)~内核截止虚拟地址(`KERNBASE+KMEMSIZE`) = 内核起始物理地址(0)~内核截止物理地址(`KMEMSIZE`)。
+映射关系(虚实映射): 内核起始虚拟地址(`KERNBASE`)~内核截止虚拟地址(`KERNBASE+KMEMSIZE`) =  内核起始物理地址(0)~内核截止物理地址(`KMEMSIZE`)。
 
 看函数。
 
 ```c
-// pmm.c
+// pmm.c 
 // boot_map_segment - setup&enable the paging mechanism
 // parameters
 //  la:   linear address of this memory need to map (after x86 segment map)
@@ -1316,7 +1315,7 @@ static void boot_map_segment(pde_t* pgdir,
         // 调用get_pte给每个页分配一个PTE
         pte_t* ptep = get_pte(pgdir, la, 1);
         assert(ptep != NULL);
-        // 给PTE填写对应页的物理地址
+        // 给PTE填写对应页的物理地址                                            
         *ptep = pa | PTE_P | perm;
     }
 }
@@ -1329,19 +1328,19 @@ static void boot_map_segment(pde_t* pgdir,
 
 这个函数建立了完整的一一映射的二级页表，彻底使能了分页机制。（之前只有内核所在的`0-4MB`空间的映射）
 
----
+-----
 
 ##### `gdt_init()`
 
 重新设置`GDT`与`TSS`。
 
----
+------
 
 `TSS`是任务状态段，保存了一些寄存器的值和不同特权级下的`SS`，方便在特权级切换时得到对应特权级的`SS`和`ESP`。
 
 [![cd0DsI.jpg](https://z3.ax1x.com/2021/04/10/cd0DsI.jpg)](https://imgtu.com/i/cd0DsI)
 
----
+-----
 
 `TSS descriptor`用来描述`TSS`的某些性质，只能存放在`GDT`中。结构如下:
 
@@ -1351,13 +1350,13 @@ static void boot_map_segment(pde_t* pgdir,
 
 `OS`通过查看`GDT`里面的`TSS descriptor`来找到`TSS`。
 
----
+-----
 
 `TR Task Rigister`分为可见部分和不可见部分。可见部分指向`GDT`中的`TSS Descriptor`，不可见部分保存`TSS Descriptor`中的`Base`和`Limit`，从而加快对于`TSS`的访问。
 
 [![cd29it.gif](https://z3.ax1x.com/2021/04/10/cd29it.gif)](https://imgtu.com/i/cd29it)
 
----
+-----
 
 在这个函数中，我们就是要对`GDT`中的`TSS Descriptor`设置一下，然后重新装载`GDT`并设置`TR`。
 
@@ -1412,7 +1411,7 @@ static struct segdesc gdt[] = {
 };
 ```
 
----
+-----
 
 ##### `check_boot_pgdir()`
 
@@ -1448,7 +1447,7 @@ static struct segdesc gdt[] = {
 
 检查的具体代码就不看了，检查的项目主要有页表对应的地址与物理地址是不是相等；页的自映射机制；临时的二级页表有没有取消；两个不同逻辑地址映射到一个物理地址。
 
----
+-----
 
 ##### `print_pgdir()`
 
@@ -1529,17 +1528,17 @@ static int get_pgtable_items(size_t left,
 }
 ```
 
----
+-----
 
 置此`pmm_init`过程结束，余下过程与`lab1`一致，不再赘述。
 
----
+-----
 
 ## 系统执行中地址映射的三个阶段
 
 其实具体过程前面都讲完了，简单总结一下。
 
----
+-----
 
 在`lab1`的链接脚本中，内核起始虚拟地址`0x100000`。
 
@@ -1559,19 +1558,19 @@ static int get_pgtable_items(size_t left,
 
 内核加载位置不变，但虚拟地址发生改变。所以最终映射关系` virt addr = linear addr = phy addr + 0xC0000000`
 
----
+-----
 
 ### 第一个阶段`bootloader`
 
 开启保护模式，探测物理内存，建立堆栈，加载`kernel`，跳转给`kernel`
 
-从`bootloader`的`start`函数（在`boot/bootasm.S`中）到执行`ucore kernel`的`kern_entry`函数之前，其虚拟地址、线性地址以及物理地址之间的映射关系与 lab1 的一样，即：
+从`bootloader`的`start`函数（在`boot/bootasm.S`中）到执行`ucore kernel`的`kern_entry`函数之前，其虚拟地址、线性地址以及物理地址之间的映射关系与lab1的一样，即：
 
 ```
  lab2 stage 1: virt addr = linear addr = phy addr
 ```
 
----
+-----
 
 ### 第二个阶段 临时页表
 
@@ -1595,7 +1594,7 @@ lab2 stage 2: virt addr = linear addr = phy addr + 0xC0000000 # 线性地址在0
 
 这还不是我们期望的映射关系，因为它仅仅映射了`0~4MB`。对于段表而言，也缺少了运行`ucore`所需的用户态段描述符和`TSS`（段）描述符相应表项。
 
----
+-----
 
 ### 第三个阶段 完善页表映射
 
@@ -1645,9 +1644,9 @@ static struct segdesc gdt[] = {
 
 在基于`ELF`执行文件格式的代码中，存在一些对代码和数据的表述，基本概念如下：
 
--   `BSS`段（`bss segment`）：指用来存放程序中未初始化的全局变量的内存区域。`BSS`是英文`Block Started by Symbol`的简称。`BSS`段属于静态内存分配。
--   数据段（`data segment`）：指用来存放程序中已初始化的全局变量的一块内存区域。数据段属于静态内存分配。
--   代码段（`code segment/text segment`）：指用来存放程序执行代码的一块内存区域。这部分区域的大小在程序运行前就已经确定，并且内存区域通常属于只读, 某些架构也允许代码段为可写，即允许修改程序。在代码段中，也有可能包含一些只读的常数变量，例如字符串常量等。
+- `BSS`段（`bss segment`）：指用来存放程序中未初始化的全局变量的内存区域。`BSS`是英文`Block Started by Symbol`的简称。`BSS`段属于静态内存分配。
+- 数据段（`data segment`）：指用来存放程序中已初始化的全局变量的一块内存区域。数据段属于静态内存分配。
+- 代码段（`code segment/text segment`）：指用来存放程序执行代码的一块内存区域。这部分区域的大小在程序运行前就已经确定，并且内存区域通常属于只读, 某些架构也允许代码段为可写，即允许修改程序。在代码段中，也有可能包含一些只读的常数变量，例如字符串常量等。
 
 在`lab2/kern/init/init.c`的`kern_init`函数中，声明了外部全局变量：
 
@@ -1680,3 +1679,479 @@ PROVIDE(end = .);
 这里的`.`表示当前地址，`.text`表示代码段起始地址，“`.data`”也是一个地址，可以看出，它即代表了代码段的结束地址，也是数据段的起始地址。类推下去，`edata`表示数据段的结束地址，`.bss`表示数据段的结束地址和`BSS`段的起始地址，而“`end`”表示`BSS`段的结束地址。
 
 这样回头看`kerne_init`中的外部全局变量，可知`edata[]`和 `end[]`这些变量是`ld`根据`kernel.ld`链接脚本生成的全局变量，表示相应段的起始地址或结束地址等，它们不在任何一个`.S`、`.c`或`.h`文件中定义。
+
+-----
+
+## 挑战1：`buddy system`
+
+### 简单介绍
+
+`buddy system`是一种连续的线性内存管理系统，它把内存划分为单位块来管理，每个存储块的大小必须是最小单位块的2的幂次。
+
+当较大的块拆分时，它将分为两个大小是它的一半的块，这两个块是彼此的伙伴。拆分出来的块只能与自己的伙伴进行合并以形成一个大小是自己两倍的块。
+
+当较小的块合并时，只能与自己的伙伴合并，合并得到的块仍需要检查是否可以与自己的伙伴再次合并。
+
+当请求一个大小为$n$的块时，`buddy system`会找到一个最合适的存储块分配，它的单位块数是比$n$大的最小的2的幂次，多余的单位块成为内碎片。
+
+`buddy system`要求内存的总单位块数为2的幂次，而这并不是一定成立的。
+
+优点：简单、几乎没有外部碎片	缺点：存在内碎片
+
+示意图：
+
+[![cyWvCD.jpg](https://z3.ax1x.com/2021/04/14/cyWvCD.jpg)](https://imgtu.com/i/cyWvCD)
+
+-----
+
+### 一个极简实现
+
+参考自[伙伴分配器的一个极简实现]: https://coolshell.cn/articles/10427.html
+
+在这个极简实现中，存储块的管理是通过存储在数组中的二叉树结构来完成的。二叉树的叶子节点是大小为1的基本块，两个互为伙伴的基本块的父节点就是他们可以合成得到的大小为2的存储块。按照这样的结构最终可以得到一个共有$2\times size -1$个节点的二叉树。二叉树中实际所存的值是这个存储块中可用的空间的大小（基本块的个数）。除此之外，我们还需要一个变量`size`来记录`buddy system`管理的内存总大小。
+
+因此，定义如下数据结构：
+
+```c
+typedef struct buddy2{
+    unsigned size;
+    unsigned longest[1];
+};
+```
+
+初始化的过程。
+
+```c
+struct buddy2* buddy2_new( int size ) {
+  struct buddy2* self;
+  unsigned node_size;
+  int i;
+
+  if (size < 1 || !IS_POWER_OF_2(size))
+    return NULL;
+
+  self = (struct buddy2*)ALLOC( 2 * size * sizeof(unsigned));
+  self->size = size;
+  node_size = size * 2;
+
+  for (i = 0; i < 2 * size - 1; ++i) {
+    if (IS_POWER_OF_2(i+1))
+      node_size /= 2;
+    self->longest[i] = node_size;
+  }
+  return self;
+}
+```
+
+分配内存的过程。分配内存时，从根节点开始递归向下搜索第一个可以满足条件的节点。这里所给的代码每次从左子树开始搜索。当得到满足条件的节点后，将其`longest`置0，表明该存储块已被分配，并递归更改其父节点的`longest`为左右子树的最大值。返回时，返回的是所分配处的内存块的起点的基本块相对于第一个基本块的偏移。
+
+这里有一个计算公式：$offset =(index + 1)\times node\_size - size$，下面给出证明：
+
+我们寻找起点的方法是一直寻找左子树直到找到叶子节点为止。记左子节点的下标关于父节点的下标的函数为$f^1(x)=2x+1$。
+
+那么左子节点的左子结点的下标关于父节点的下标的函数为$f^2(x)=2f^1(x)+1=4x+3$。
+
+则有
+$$
+f^n(x)=2f^{n-1}(x)+1\\
+令g^n(x)=f^n(x)+1\\
+则有f^n(x)+1=2(f^{n-1}(x)+1)\\
+即g^n(x)=2g^{n-1}(x)\\
+g^1(x)=2x+2\\
+则g^n(x)=2^{n}\times(x+1)\\
+则f^n(x)=2^{n}\times(x+1)-1
+$$
+因此只需要确定$n$的值即可，显然$n$的值即为$\log node\_size$，因此便有$leaf\_index = (index+1)\times node\_size-1$
+
+而第一个叶子节点的下标为$size-1$
+
+故便有上面的公式。
+
+代码如下：
+
+```c
+int buddy2_alloc(struct buddy2* self, int size) {
+  unsigned index = 0;
+  unsigned node_size;
+  unsigned offset = 0;
+
+  if (self==NULL)
+    return -1;
+
+  if (size <= 0)
+    size = 1;
+  else if (!IS_POWER_OF_2(size))
+    size = fixsize(size);
+
+  if (self->longest[index] < size)
+    return -1;
+
+  for(node_size = self->size; node_size != size; node_size /= 2 ) {
+    if (self->longest[LEFT_LEAF(index)] >= size)
+      index = LEFT_LEAF(index);
+    else
+      index = RIGHT_LEAF(index);
+  }
+
+  self->longest[index] = 0;
+  offset = (index + 1) * node_size - self->size;
+
+  while (index) {
+    index = PARENT(index);
+    self->longest[index] =
+      MAX(self->longest[LEFT_LEAF(index)], self->longest[RIGHT_LEAF(index)]);
+  }
+
+  return offset;
+}
+```
+
+释放的过程。释放时由于传入的参数是基本块的偏移，因此要先找到分配出去的存储块。从对应的叶子节点向上递归直到找到`longest`为0的节点即为被分配的存储块。再从这个存储块向上递归，每次检查和伙伴节点是否可以合并，并更新父节点的`longest`，直到根节点为止。代码如下：
+
+```c
+void buddy2_free(struct buddy2* self, int offset) {
+  unsigned node_size, index = 0;
+  unsigned left_longest, right_longest;
+
+  assert(self && offset >= 0 && offset < size);
+
+  node_size = 1;
+  index = offset + self->size - 1;
+
+  for (; self->longest[index] ; index = PARENT(index)) {
+    node_size *= 2;
+    if (index == 0)
+      return;
+  }
+
+  self->longest[index] = node_size;
+
+  while (index) {
+    index = PARENT(index);
+    node_size *= 2;
+
+    left_longest = self->longest[LEFT_LEAF(index)];
+    right_longest = self->longest[RIGHT_LEAF(index)];
+
+    if (left_longest + right_longest == node_size)
+      self->longest[index] = node_size;
+    else
+      self->longest[index] = MAX(left_longest, right_longest);
+  }
+}
+```
+
+这份代码是有缺陷的，`longest`的存储选用了32位的整型，而由于所有大小均为2的幂次，因此可以仅用一个8位整型来存储，从而减少`buddy system`所占用的空间。此外，在内存的分配策略上，由于每次都先搜索左子树，因此并不能找到最佳的存储块来分配，应该搜索左右子树中满足条件的较小者。
+
+### `ucore`中的`buddy system`
+
+`ucore`中的`buddy system`并不好用，原因主要以下两点：①初始化内存时可能会有多段，好在实际上只有一段大小为一百多兆的内存使得我们可以继续做下去，否则两块不连续的内存要怎么运用`buddy system`还是个问题。②物理内存的页数并不是2的幂次，`ucore`中实际可用的物理内存是32292个页（这个可以在先用`default_pmm_manager`去探测出来），而`buddy system`对于物理内存的管理要求单位块的数量是2的幂次，怎么处理也是问题。有两种处理方法①向下取整，多余内存单独处理/不分配。②向上取整，少的内存初始化时就标记为空。
+
+这里实现时先简单采用向下取整，多余内存不分配的方式，只对16384个物理页进行分配。
+
+其次，上面的极简实现不能完全照抄，原因有下：①缺陷前面说了②管理物理页也是要占内存的，内核栈大小有限，要把管理物理页占的内存也移到物理页中，余下内存再参与分配。
+
+实现时并没有修改`longest`的存储，仍然存储的是大小而不是对数，主要是考虑到，标记被占用时若用-1则会影响代码中的`MAX`操作，这点或许回来会改进。
+
+`default_pmm_manager`中用到的循环双向链表在我们这个二叉树结构的`buddy system`中用不到。
+
+下面说具体实现
+
+-----
+
+我的实现并不完美，首先我选择的是最简单的方法，只是为了能让其运行；其次一些页的标志位并没有置位。后续可能会再更正。
+
+-----
+
+#### `buddy.h`
+
+这个很容易，参考`default_pmm.h`即可完成。
+
+```c
+#ifndef __KERN_MM_BUDDY_PMM_H
+#define __KERN_MM_BUDDY_PMM_H
+
+#include <pmm.h>
+
+extern const struct pmm_manager buddy_pmm_manager;
+
+#endif /* ! __KERN_MM_BUDDY_PMM_H */
+```
+
+#### `pmm.c`
+
+这里需要修改一下采用的`pmm_manager`，还需要引用`buddy.h`头文件
+
+```c
+// init_pmm_manager - initialize a pmm_manager instance
+static void init_pmm_manager(void) {
+    pmm_manager = &buddy_pmm_manager;
+    cprintf("memory management: %s\n", pmm_manager->name);
+    pmm_manager->init();
+}
+```
+
+#### `budddy.c`
+
+首先引用一些宏（来自极简实现）和自己写一个函数。
+
+```c
+#define LEFT_LEAF(index) ((index)*2 + 1)
+#define RIGHT_LEAF(index) ((index)*2 + 2)
+#define PARENT(index) (((index) + 1) / 2 - 1)
+
+#define IS_POWER_OF_2(x) (!((x) & ((x)-1)))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
+uint8_t ROUND_DOWN_LOG(int size) {
+    uint8_t n = 0;
+    while (size >>= 1) {
+        n++;
+    }
+    return n;
+}
+```
+
+然后定义一些变量。这里把极简实现中的`buddy2`结构拆开了，其中`total_size`保存在内核栈而`longest`数组保存在物理页中，储存在可分配的前面的物理页中，起始地址由`buddy_addr`保存，将其转换为`unsigned`指针即可以数组形式访问数据。`manage_page`指向可以被分配的物理页的`Page`结构。
+
+```c
+// 单位都是页的个数
+// total_size 管理的总内存大小
+// manage_size 实际可以被分配的内存大小
+// buddy_size buddy结构占据的内存大小
+// free_size 类似以前的nr_free
+unsigned total_size, manage_size, buddy_size, free_size;
+// buddy_addr buddy结构的起始地址
+unsigned buddy_addr;
+// manage_page 实际可以被分配的物理内存的起始页
+struct Page* manage_page;
+
+// 为了方便书写
+#define buddy ((unsigned*)buddy_addr)
+```
+
+##### `buddy_init`
+
+其实没什么需要初始化的，象征性清空一下`free_size`。
+
+```c
+static void buddy_init(void) {
+    free_size = 0;
+}
+```
+
+##### `buddy_init_memmap`
+
+由于我们知道只调用一次，就简单实现成只能调一次的函数了。注意`buddy_addr`的地址得是内核虚拟地址，因此要转换一下。`manage_size`需要是2的幂次，因此修整一下（向下取整）。得到`manage_size`之后就可以计算管理所需要的内存大小了，一个`unsigned` 占据`4byte`，故占的总页数就是$\LARGE \frac{2 * manage\_size * 4byte}{page\_size}=\frac{2*manage\_size}{1024}$。之后再向后移动`base`得到实际管理的物理页对应的`Page`，并保存在`manage_base`中。之后便调用`buddy_new`完成`buddy`数组的构建。最后再打印出相关信息。
+
+```c
+static void buddy_init_memmap(struct Page* base, size_t n) {
+    cprintf("buddy_init_memmap\n");
+    assert(n > 0);
+    struct Page* p = base;
+    for (; p != base + n; p++) {
+        assert(PageReserved(p));
+        p->flags = p->property = 0;
+        set_page_ref(p, 0);
+    }
+    total_size = n;
+    buddy_addr = page2kva(base);
+    n = 1 << ROUND_DOWN_LOG(n);
+    manage_size = n;
+    free_size += n;
+    buddy_size = 2 * n / 1024;
+    base += buddy_size;
+    manage_page = base;
+    base->property = n;
+    SetPageProperty(base);
+    buddy_new(manage_size);
+    cprintf("---------buddy init end-------\n");
+    cprintf("total_size = %d\n", total_size);
+    cprintf("buddy_size = %d\n", buddy_size);
+    cprintf("manage_size = %d\n", manage_size);
+    cprintf("buddy_addr = 0x%08x\n", buddy_addr);
+    cprintf("manage_page_addr = 0x%08x\n", manage_page);
+    cprintf("-------------------------------\n");
+}
+```
+
+##### `buddy_new`
+
+类似极简实现，不再赘述。
+
+```c
+void buddy_new(int size) {
+    unsigned node_size;
+    int i;
+
+    if (size < 1 || !IS_POWER_OF_2(size))
+        return NULL;
+
+    node_size = size * 2;
+
+    for (i = 0; i < 2 * size - 1; ++i) {
+        if (IS_POWER_OF_2(i + 1))
+            node_size /= 2;
+        buddy[i] = node_size;
+    }
+}
+```
+
+##### `buddy_alloc_pages`
+
+首先做大小检查，其次调用`buddy_alloc`获得实际分出的`Page`的偏移，再修改一些变量返回即可。
+
+```c
+static struct Page* buddy_alloc_pages(size_t n) {
+    assert(n > 0);
+    if (n > free_size) {
+        return NULL;
+    }
+    int offset = buddy_alloc(n);
+    struct Page* page = NULL;
+    page = manage_page + offset;
+    ClearPageProperty(page);
+    free_size -= n;
+    return page;
+}
+```
+
+##### `buddy_alloc`
+
+也是类似极简实现，首先修正`size`（向上取整）。再选取子节点时，修正了极简实现中的算法，选择左右子节点中较小的能满足条件的子节点。
+
+```c
+int buddy_alloc(int size) {
+    unsigned index = 0;
+    unsigned node_size;
+    unsigned offset = 0;
+
+    if (size <= 0)
+        size = 1;
+    else if (!IS_POWER_OF_2(size))
+        size = 1 << (ROUND_DOWN_LOG(size) + 1);
+
+    if (buddy[index] < size)
+        return -1;
+
+    for (node_size = manage_size; node_size != size; node_size /= 2) {
+        unsigned left = buddy[LEFT_LEAF(index)];
+        unsigned right = buddy[RIGHT_LEAF(index)];
+        if (left > right) {
+            if (right >= size)
+                index = RIGHT_LEAF(index);
+            else
+                index = LEFT_LEAF(index);
+        } else {
+            if (left >= size)
+                index = LEFT_LEAF(index);
+            else
+                index = RIGHT_LEAF(index);
+        }
+    }
+
+    buddy[index] = 0;
+    offset = (index + 1) * node_size - manage_size;
+
+    while (index) {
+        index = PARENT(index);
+        buddy[index] = MAX(buddy[LEFT_LEAF(index)], buddy[RIGHT_LEAF(index)]);
+    }
+    return offset;
+}
+```
+
+#### `buddy_free_pages`
+
+回收与原本代码差别不大，通过`buddy_free`来回收，注意需要计算偏移量。
+
+```c
+static void buddy_free_pages(struct Page* base, size_t n) {
+    assert(n > 0);
+    struct Page* p = base;
+    // 清除标志位和ref
+    for (; p != base + n; p++) {
+        assert(!PageReserved(p) && !PageProperty(p));
+        p->flags = 0;
+        set_page_ref(p, 0);
+    }
+    buddy_free(base - manage_page);
+    free_size += n;
+}
+```
+
+##### `buddy_free`
+
+与极简实现基本类似。
+
+```c
+void buddy_free(int offset) {
+    unsigned node_size, index = 0;
+    unsigned left_longest, right_longest;
+    cprintf("buddy free: %d\n", offset);
+
+    assert(offset >= 0 && offset < manage_size);
+
+    node_size = 1;
+    index = offset + manage_size - 1;
+
+    for (; buddy[index]; index = PARENT(index)) {
+        node_size *= 2;
+        if (index == 0)
+            return;
+    }
+
+    buddy[index] = node_size;
+
+    while (index) {
+        index = PARENT(index);
+        node_size *= 2;
+
+        left_longest = buddy[LEFT_LEAF(index)];
+        right_longest = buddy[RIGHT_LEAF(index)];
+
+        if (left_longest + right_longest == node_size)
+            buddy[index] = node_size;
+        else
+            buddy[index] = MAX(left_longest, right_longest);
+    }
+}
+```
+
+其余两个函数不再赘述。所用的`check`函数中部分内容来自某博客，主要是前面那副图的内存的分配过程的检查。
+
+再次`make qemu`，得到一下结果，说明`buddy system`工作正常。
+
+```
+---------buddy init end-------
+total_size = 32289
+buddy_size = 32
+manage_size = 16384
+buddy_addr = 0xc01bf000
+manage_page_addr = 0xc012156c
+-------------------------------
+check alloc page()
+A 0xc012156c
+B 0xc0123d6c
+p0 0xc012156c
+A 0xc014956c
+B 0xc0149f6c
+C 0xc014a96c
+D 0xc014a46c
+D 0xc014a46c
+C 0xc014a96c
+check_alloc_page() succeeded!
+check_pgdir() succeeded!
+check_boot_pgdir() succeeded!
+-------------------- BEGIN --------------------
+PDE(0e0) c0000000-f8000000 38000000 urw
+  |-- PTE(38000) c0000000-f8000000 38000000 -rw
+PDE(001) fac00000-fb000000 00400000 -rw
+  |-- PTE(000e0) faf00000-fafe0000 000e0000 urw
+  |-- PTE(00001) fafeb000-fafec000 00001000 -rw
+--------------------- END ---------------------
+++ setup timer interrupts
+100 ticks
+100 ticks
+```
+
