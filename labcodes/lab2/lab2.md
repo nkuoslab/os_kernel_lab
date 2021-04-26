@@ -230,19 +230,18 @@ spin:
 
 进入`kern_init`后便会执行`pmm_init()`完成物理内存的管理。它完成的主要工作有
 
-*前面也提到了，一些工作移到了`entry.S`中，即4和8*
+*前面也提到了，一些工作移到了`entry.S`中，即4、6和8*
 
 1. 初始化物理内存页管理器框架`pmm_manager`；
 2. 建立空闲的`page`链表，这样就可以分配以页（4KB）为单位的空闲内存了；
-3. 
-4. 检查物理内存页分配算法；
-5. 为确保切换到分页机制后，代码能够正常执行，先建立一个临时二级页表；
-6. 建立一一映射关系的二级页表；
-7. 使能分页机制；
-8. 重新设置全局段描述符表；
-9. 取消临时二级页表；
-10. 检查页表建立是否正确；
-11. 通过自映射机制完成页表的打印输出（这部分是扩展知识）
+3. 检查物理内存页分配算法；
+4. 为确保切换到分页机制后，代码能够正常执行，先建立一个临时二级页表；
+5. 建立一一映射关系的二级页表；
+6. 使能分页机制；
+7. 重新设置全局段描述符表；
+8. 取消临时二级页表；
+9. 检查页表建立是否正确；
+10. 通过自映射机制完成页表的打印输出（这部分是扩展知识）
 
 ```c
 //pmm.c
@@ -577,7 +576,7 @@ pa2page(uintptr_t pa) {
  use PGADDR(PDX(la), PTX(la), PGOFF(la)).
 ```
 
-注意`page_init`代码中遍历`e820map`两次，第一次是为了找到最大的的物理内存地址`maxpa`，然后根据它来计算所需的`Page`数目从而分配空间，空间是从内核结束的地址开始。结束的地址到`KMEMSiZE`都是空闲空间。第二次是调用`init_memmap`对这些空闲空间初始化。
+注意`page_init`代码中遍历`e820map`两次，第一次是为了找到最大的的物理内存地址`maxpa`，然后根据它来计算所需的`Page`数目从而分配空间，空间是从内核结束的地址开始。结束的地址到`KMEMSIZE`都是空闲空间。第二次是调用`init_memmap`对这些空闲空间初始化。
 
 [<img src="https://z3.ax1x.com/2021/04/07/cGWNwV.png" alt="cGWNwV.png" style="zoom: 150%;" />](https://imgtu.com/i/cGWNwV)
 
@@ -672,7 +671,7 @@ list_entry_t *list_prev(list_entry_t *listelm)					 // 上一个元素
 
 其次，看代码。`offsetof(type, member)`接受一个结构体类型`type`和结构体中一个变量`member`，返回`member`变量到结构体头部的地址。
 
-具体原理：首先构造一个`type*`，其指向的地址是0，然后获取得到其`member`变量`((type *)0)->member`，之后通过`&`取其地址，再减去结构体起始地址0，就得到了地址差。再转换成`size_t`（即`unsigned int`）类型即可。
+具体原理：首先构造一个`type*`，其指向的地址是0，然后获取得到其`member`变量`((type *)0)->member`，之后通过`&`取其地址，再减去结构体起始地址0，就得到了偏移。再转换成`size_t`（即`unsigned int`）类型即可。
 
 `to_struct(ptr, type, member)`接受链表指针`ptr`，从指针指向的地址向前移动，移动距离即为结构体中链表指针与结构体头的差，用`offsetof`得到。再把其类型转换为对应的结构体类型即可。
 
@@ -704,7 +703,7 @@ kern_init ==> pmm_init ==> page_init ==> init_memmap ==> pmm_manager->init_memma
 
 这个函数根据`page_init`传来的参数（连续内存空间的起始页和页的个数）来建立一个连续内存空闲块的双向链表。
 
-> 这一段翻译自注释，可能是我理解有误，反正这个过程是不完全正确的
+> 这一段翻译自注释，这个过程是不完全正确的
 >
 > 首先你需要初始化每一个页，步骤如下：
 >
@@ -817,7 +816,7 @@ if (page != NULL) {
 
 释放`base`开始的连续`n`个物理页。这个工作比分配复杂，主要在于需要考虑合并的问题。
 
-首先遍历`free_list`找到合适的位置，然后再插入进去，再修改一些标志位和字段，最后再考虑合并问题。
+首先遍历`free_list`看能不能合并，可以合并就进行合并，再修改一些标志位和字段，最终得到了一块大的空闲块（如果有合并的话）。之后再遍历一次将这一块插入正确的位置。
 
 看原来代码。
 
@@ -997,7 +996,7 @@ page2pa(struct Page *page) {
 
 ```c
 pte_t* get_pte(pde_t* pgdir, uintptr_t la, bool create) {
-    // 获取la对应的页表项
+    // 获取la对应的页目录项
     pde_t* pdep = &pgdir[PDX(la)];
     // 通过检查页目录项的存在位判断对应的二级页表是否存在
     if (!(*pdep & 0x1)) {
@@ -1050,20 +1049,20 @@ pte_t* get_pte(pde_t* pgdir, uintptr_t la, bool create) {
     - PS (`Size`) 位：表示一个页 4MB(1)/4KB(0) 。
     - G（`global`位）：表示是否将虚拟地址与物理地址的转换结果缓存到 `TLB `中。
     - Avail： 9-11 位保留给 OS 使用。
-    - 12-31 位： `PTE` 基址的高20位（由于按页对齐，后12位均为0）。
+    - 12-31 位： `PTE` 基址（物理地址）的高20位（由于按页对齐，后12位均为0）。
 
   - `PTE`
 
     [![cYQ3AU.png](https://z3.ax1x.com/2021/04/08/cYQ3AU.png)](https://imgtu.com/i/cYQ3AU)
 
     - D(`Dirty`)位：脏位。
-    - 12-31 位： 页基址的高20位（由于按页对齐，后12位均为0）。
+    - 12-31 位： 页基址（物理地址）的高20位（由于按页对齐，后12位均为0）。
 
   - 高20位保存对应二级页表/页的高二十位地址，低12位保存一些标志位。
 
 - 如果`ucore`执行过程中访问内存，出现了页访问异常，请问硬件要做哪些事情？
 
-  会触发缺页异常， CPU 将产生页访问异常的线性地址放到 cr2 寄存器中，然后触发异常，由异常处理程序根缺页异常类型来进行不同处理，如从磁盘中读取出内存页等。
+  会触发缺页异常， CPU 将产生页访问异常的线性地址放到 cr2 寄存器中，然后触发异常，由异常处理程序根据缺页异常类型来进行不同处理，如从磁盘中读取出内存页等。
 
 -----
 
@@ -1089,7 +1088,7 @@ pte2page(pte_t pte) {
 // 释放一页
 #define free_page(page) free_pages(page, 1)
 
-// Page的ref减1
+// Page的ref减1，并返回减过以后的ref
 // 当ref为0时，这一个Page需要释放
 static inline int
 page_ref_dec(struct Page *page) {
@@ -1244,7 +1243,7 @@ static void check_alloc_page(void) {
 
 将当前内核页表的物理地址设置进对应的页目录项中(内核页表的自映射)
 
-关于页表自映射，首先主要目的是为了少存储进程的`4GB`的虚拟内存空间所对应的`4KB`的页表，从而节省`4KB`空间，代价是要求这`4GB`的页表连续在一个`4MB`的按`4MB`对齐的内存空间中。
+关于页表自映射，首先主要目的是为了少存储进程的`4GB`的虚拟内存空间所对应的`4KB`的页表，从而节省`4KB`空间，代价是要求这`4GB`空间的页表连续在一个`4MB`的按`4MB`对齐的内存空间中。
 
 下面说具体原理。（有些复杂）
 
@@ -1311,7 +1310,7 @@ static void boot_map_segment(pde_t* pgdir,
     size_t n = ROUNDUP(size + PGOFF(la), PGSIZE) / PGSIZE;
     la = ROUNDDOWN(la, PGSIZE);
     pa = ROUNDDOWN(pa, PGSIZE);
-    for (; n > 0; n--, la += PGSIZE, pa += PGSIZE) {、
+    for (; n > 0; n--, la += PGSIZE, pa += PGSIZE) {
         // 调用get_pte给每个页分配一个PTE
         pte_t* ptep = get_pte(pgdir, la, 1);
         assert(ptep != NULL);
@@ -1479,7 +1478,7 @@ pte_t* const vpt = (pte_t*)VPT;
 pde_t* const vpd = (pde_t*)PGADDR(PDX(VPT), PDX(VPT), 0);
 ```
 
-`vpd`的值就是页目录表的起始虚地址，`vpt`是页目录表中第一个目录表项指向的页表的起始虚地址，由于页表自映射机制，因此就两个相同的拼起来。
+`vpd`的值就是页目录表的起始虚地址，`vpt`是页目录表中第一个目录表项指向的页表的起始虚地址（就是页表的起始地址），由于页表自映射机制，因此就两个相同的拼起来。
 
 其中`PGADDR`就是通过知道`PDE`的`index`和`offset`拼出的逻辑地址。
 
@@ -1708,7 +1707,7 @@ PROVIDE(end = .);
 
 参考自[伙伴分配器的一个极简实现]: https://coolshell.cn/articles/10427.html
 
-在这个极简实现中，存储块的管理是通过存储在数组中的二叉树结构来完成的。二叉树的叶子节点是大小为1的基本块，两个互为伙伴的基本块的父节点就是他们可以合成得到的大小为2的存储块。按照这样的结构最终可以得到一个共有$2\times size -1$个节点的二叉树。二叉树中实际所存的值是这个存储块中可用的空间的大小（基本块的个数）。除此之外，我们还需要一个变量`size`来记录`buddy system`管理的内存总大小。
+在这个极简实现中，存储块的管理是通过存储在数组中的二叉树结构来完成的。二叉树的叶子节点是大小为1的基本块，两个互为伙伴的基本块的父节点就是他们可以合成得到的大小为2的存储块。按照这样的结构最终可以得到一个共有$2\times\_size -1$个节点的二叉树。二叉树中实际所存的值是这个存储块中可用的空间的大小（基本块的个数）。除此之外，我们还需要一个变量`size`来记录`buddy system`管理的内存总大小。
 
 因此，定义如下数据结构：
 
@@ -1958,8 +1957,8 @@ static void buddy_init_memmap(struct Page* base, size_t n) {
     buddy_addr = page2kva(base);
     n = 1 << ROUND_DOWN_LOG(n);
     manage_size = n;
-    free_size += n;
     buddy_size = 2 * n / 1024;
+    free_size += manage_size;
     base += buddy_size;
     manage_page = base;
     base->property = n;
@@ -2127,6 +2126,7 @@ void buddy_free(int offset) {
 total_size = 32289
 buddy_size = 32
 manage_size = 16384
+free_size = 16384
 buddy_addr = 0xc01bf000
 manage_page_addr = 0xc012156c
 -------------------------------
@@ -2155,3 +2155,6 @@ PDE(001) fac00000-fb000000 00400000 -rw
 100 ticks
 ```
 
+-----
+
+后来改进了向上取整的，但是有点bug不知道哪有问题改不对了。

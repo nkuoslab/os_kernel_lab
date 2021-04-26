@@ -1,12 +1,12 @@
+#include <assert.h>
 #include <defs.h>
-#include <x86.h>
+#include <kdebug.h>
+#include <kmonitor.h>
 #include <stab.h>
 #include <stdio.h>
 #include <string.h>
 #include <sync.h>
-#include <kdebug.h>
-#include <kmonitor.h>
-#include <assert.h>
+#include <x86.h>
 
 #define STACKFRAME_DEPTH 20
 
@@ -17,12 +17,12 @@ extern const char __STABSTR_END__[];        // end of string table
 
 /* debug information about a particular instruction pointer */
 struct eipdebuginfo {
-    const char *eip_file;                   // source code filename for eip
-    int eip_line;                           // source code line number for eip
-    const char *eip_fn_name;                // name of function containing eip
-    int eip_fn_namelen;                     // length of function's name
-    uintptr_t eip_fn_addr;                  // start address of function
-    int eip_fn_narg;                        // number of function arguments
+    const char* eip_file;     // source code filename for eip
+    int eip_line;             // source code line number for eip
+    const char* eip_fn_name;  // name of function containing eip
+    int eip_fn_namelen;       // length of function's name
+    uintptr_t eip_fn_addr;    // start address of function
+    int eip_fn_narg;          // number of function arguments
 };
 
 /* *
@@ -66,9 +66,11 @@ struct eipdebuginfo {
  *      stab_binsearch(stabs, &left, &right, N_SO, 0xf0100184);
  * will exit setting left = 118, right = 554.
  * */
-static void
-stab_binsearch(const struct stab *stabs, int *region_left, int *region_right,
-           int type, uintptr_t addr) {
+static void stab_binsearch(const struct stab* stabs,
+                           int* region_left,
+                           int* region_right,
+                           int type,
+                           uintptr_t addr) {
     int l = *region_left, r = *region_right, any_matches = 0;
 
     while (l <= r) {
@@ -76,9 +78,9 @@ stab_binsearch(const struct stab *stabs, int *region_left, int *region_right,
 
         // search for earliest stab with right type
         while (m >= l && stabs[m].n_type != type) {
-            m --;
+            m--;
         }
-        if (m < l) {    // no match in [l, m]
+        if (m < l) {  // no match in [l, m]
             l = true_m + 1;
             continue;
         }
@@ -96,17 +98,16 @@ stab_binsearch(const struct stab *stabs, int *region_left, int *region_right,
             // *region_right
             *region_left = m;
             l = m;
-            addr ++;
+            addr++;
         }
     }
 
     if (!any_matches) {
         *region_right = *region_left - 1;
-    }
-    else {
+    } else {
         // find rightmost region containing 'addr'
         l = *region_right;
-        for (; l > *region_left && stabs[l].n_type != type; l --)
+        for (; l > *region_left && stabs[l].n_type != type; l--)
             /* do nothing */;
         *region_left = l;
     }
@@ -118,8 +119,7 @@ stab_binsearch(const struct stab *stabs, int *region_left, int *region_right,
  * was found, and negative if not.  But even if it returns negative it
  * has stored some information into '*info'.
  * */
-int
-debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info) {
+int debuginfo_eip(uintptr_t addr, struct eipdebuginfo* info) {
     const struct stab *stabs, *stab_end;
     const char *stabstr, *stabstr_end;
 
@@ -191,10 +191,9 @@ debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info) {
     // We can't just use the "lfile" stab because inlined functions
     // can interpolate code from a different file!
     // Such included source files use the N_SOL stab type.
-    while (lline >= lfile
-           && stabs[lline].n_type != N_SOL
-           && (stabs[lline].n_type != N_SO || !stabs[lline].n_value)) {
-        lline --;
+    while (lline >= lfile && stabs[lline].n_type != N_SOL &&
+           (stabs[lline].n_type != N_SO || !stabs[lline].n_value)) {
+        lline--;
     }
     if (lline >= lfile && stabs[lline].n_strx < stabstr_end - stabstr) {
         info->eip_file = stabstr + stabs[lline].n_strx;
@@ -203,10 +202,9 @@ debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info) {
     // Set eip_fn_narg to the number of arguments taken by the function,
     // or 0 if there was no containing function.
     if (lfun < rfun) {
-        for (lline = lfun + 1;
-             lline < rfun && stabs[lline].n_type == N_PSYM;
-             lline ++) {
-            info->eip_fn_narg ++;
+        for (lline = lfun + 1; lline < rfun && stabs[lline].n_type == N_PSYM;
+             lline++) {
+            info->eip_fn_narg++;
         }
     }
     return 0;
@@ -217,93 +215,105 @@ debuginfo_eip(uintptr_t addr, struct eipdebuginfo *info) {
  * of kernel entry, the start addresses of data and text segements, the start
  * address of free memory and how many memory that kernel has used.
  * */
-void
-print_kerninfo(void) {
+void print_kerninfo(void) {
     extern char etext[], edata[], end[], kern_init[];
     cprintf("Special kernel symbols:\n");
     cprintf("  entry  0x%08x (phys)\n", kern_init);
     cprintf("  etext  0x%08x (phys)\n", etext);
     cprintf("  edata  0x%08x (phys)\n", edata);
     cprintf("  end    0x%08x (phys)\n", end);
-    cprintf("Kernel executable memory footprint: %dKB\n", (end - kern_init + 1023)/1024);
+    cprintf("Kernel executable memory footprint: %dKB\n",
+            (end - kern_init + 1023) / 1024);
 }
 
 /* *
  * print_debuginfo - read and print the stat information for the address @eip,
  * and info.eip_fn_addr should be the first address of the related function.
  * */
-void
-print_debuginfo(uintptr_t eip) {
+void print_debuginfo(uintptr_t eip) {
     struct eipdebuginfo info;
     if (debuginfo_eip(eip, &info) != 0) {
         cprintf("    <unknow>: -- 0x%08x --\n", eip);
-    }
-    else {
+    } else {
         char fnname[256];
         int j;
-        for (j = 0; j < info.eip_fn_namelen; j ++) {
+        for (j = 0; j < info.eip_fn_namelen; j++) {
             fnname[j] = info.eip_fn_name[j];
         }
         fnname[j] = '\0';
-        cprintf("    %s:%d: %s+%d\n", info.eip_file, info.eip_line,
-                fnname, eip - info.eip_fn_addr);
+        cprintf("    %s:%d: %s+%d\n", info.eip_file, info.eip_line, fnname,
+                eip - info.eip_fn_addr);
     }
 }
 
-static __noinline uint32_t
-read_eip(void) {
+static __noinline uint32_t read_eip(void) {
     uint32_t eip;
-    asm volatile("movl 4(%%ebp), %0" : "=r" (eip));
+    asm volatile("movl 4(%%ebp), %0" : "=r"(eip));
     return eip;
 }
 
 /* *
- * print_stackframe - print a list of the saved eip values from the nested 'call'
- * instructions that led to the current point of execution
+ * print_stackframe - print a list of the saved eip values from the nested
+ * 'call' instructions that led to the current point of execution
  *
  * The x86 stack pointer, namely esp, points to the lowest location on the stack
- * that is currently in use. Everything below that location in stack is free. Pushing
- * a value onto the stack will invole decreasing the stack pointer and then writing
- * the value to the place that stack pointer pointes to. And popping a value do the
- * opposite.
+ * that is currently in use. Everything below that location in stack is free.
+ * Pushing a value onto the stack will invole decreasing the stack pointer and
+ * then writing the value to the place that stack pointer pointes to. And
+ * popping a value do the opposite.
  *
  * The ebp (base pointer) register, in contrast, is associated with the stack
  * primarily by software convention. On entry to a C function, the function's
  * prologue code normally saves the previous function's base pointer by pushing
- * it onto the stack, and then copies the current esp value into ebp for the duration
- * of the function. If all the functions in a program obey this convention,
- * then at any given point during the program's execution, it is possible to trace
- * back through the stack by following the chain of saved ebp pointers and determining
- * exactly what nested sequence of function calls caused this particular point in the
- * program to be reached. This capability can be particularly useful, for example,
- * when a particular function causes an assert failure or panic because bad arguments
- * were passed to it, but you aren't sure who passed the bad arguments. A stack
- * backtrace lets you find the offending function.
+ * it onto the stack, and then copies the current esp value into ebp for the
+ * duration of the function. If all the functions in a program obey this
+ * convention, then at any given point during the program's execution, it is
+ * possible to trace back through the stack by following the chain of saved ebp
+ * pointers and determining exactly what nested sequence of function calls
+ * caused this particular point in the program to be reached. This capability
+ * can be particularly useful, for example, when a particular function causes an
+ * assert failure or panic because bad arguments were passed to it, but you
+ * aren't sure who passed the bad arguments. A stack backtrace lets you find the
+ * offending function.
  *
  * The inline function read_ebp() can tell us the value of current ebp. And the
- * non-inline function read_eip() is useful, it can read the value of current eip,
- * since while calling this function, read_eip() can read the caller's eip from
- * stack easily.
+ * non-inline function read_eip() is useful, it can read the value of current
+ * eip, since while calling this function, read_eip() can read the caller's eip
+ * from stack easily.
  *
- * In print_debuginfo(), the function debuginfo_eip() can get enough information about
- * calling-chain. Finally print_stackframe() will trace and print them for debugging.
+ * In print_debuginfo(), the function debuginfo_eip() can get enough information
+ * about calling-chain. Finally print_stackframe() will trace and print them for
+ * debugging.
  *
- * Note that, the length of ebp-chain is limited. In boot/bootasm.S, before jumping
- * to the kernel entry, the value of ebp has been set to zero, that's the boundary.
+ * Note that, the length of ebp-chain is limited. In boot/bootasm.S, before
+ * jumping to the kernel entry, the value of ebp has been set to zero, that's
+ * the boundary.
  * */
-void
-print_stackframe(void) {
-     /* LAB1 YOUR CODE : STEP 1 */
-     /* (1) call read_ebp() to get the value of ebp. the type is (uint32_t);
-      * (2) call read_eip() to get the value of eip. the type is (uint32_t);
-      * (3) from 0 .. STACKFRAME_DEPTH
-      *    (3.1) printf value of ebp, eip
-      *    (3.2) (uint32_t)calling arguments [0..4] = the contents in address (uint32_t)ebp +2 [0..4]
-      *    (3.3) cprintf("\n");
-      *    (3.4) call print_debuginfo(eip-1) to print the C calling function name and line number, etc.
-      *    (3.5) popup a calling stackframe
-      *           NOTICE: the calling funciton's return addr eip  = ss:[ebp+4]
-      *                   the calling funciton's ebp = ss:[ebp]
-      */
-}
+void print_stackframe(void) {
+    /* LAB1 YOUR CODE : STEP 1 */
+    /* (1) call read_ebp() to get the value of ebp. the type is (uint32_t);
+     * (2) call read_eip() to get the value of eip. the type is (uint32_t);
+     * (3) from 0 .. STACKFRAME_DEPTH
+     *    (3.1) printf value of ebp, eip
+     *    (3.2) (uint32_t)calling arguments [0..4] = the contents in address
+     * (uint32_t)ebp +2 [0..4] (3.3) cprintf("\n"); (3.4) call
+     * print_debuginfo(eip-1) to print the C calling function name and line
+     * number, etc. (3.5) popup a calling stackframe NOTICE: the calling
+     * funciton's return addr eip  = ss:[ebp+4] the calling funciton's ebp =
+     * ss:[ebp]
+     */
 
+    uint32_t ebp = read_ebp();
+    uint32_t eip = read_eip();
+    for (int i = 0; i < STACKFRAME_DEPTH && ebp != 0; i++) {
+        cprintf("ebp:0x%08x eip:0x%08x args:", ebp, eip);
+        for (int j = 0; j < 4; j++) {
+            uint32_t arg = *((uint32_t*)ebp + 2 + j);
+            cprintf("0x%08x ", arg);
+        }
+        cprintf("\n");
+        print_debuginfo(eip - 1);
+        eip = *((uint32_t*)ebp + 1);
+        ebp = *((uint32_t*)ebp);
+    }
+}
