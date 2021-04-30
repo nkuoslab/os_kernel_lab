@@ -380,6 +380,7 @@ int do_pgfault(struct mm_struct* mm, uint32_t error_code, uintptr_t addr) {
      * the PDT of these vma
      *
      */
+
     ptep = get_pte(mm->pgdir, addr, 1);
     // 如果一个pte全是0，表示目标页帧不存在，需要分配一个物理页并建立虚实映射关系
     if (*ptep == 0) {
@@ -393,7 +394,7 @@ int do_pgfault(struct mm_struct* mm, uint32_t error_code, uintptr_t addr) {
         // 如果开启了
         if (swap_init_ok) {
             struct Page* page = NULL;
-            if (swap_in(mm, addr, page)) {
+            if (swap_in(mm, addr, &page)) {
                 // 如果返回值不为0说明出了问题 failed
                 cprintf("swap in failed.\n");
                 goto failed;
