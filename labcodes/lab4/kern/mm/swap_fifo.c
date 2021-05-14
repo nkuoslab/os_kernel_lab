@@ -41,33 +41,47 @@ _fifo_init_mm(struct mm_struct *mm)
 /*
  * (3)_fifo_map_swappable: According FIFO PRA, we should link the most recent arrival page at the back of pra_list_head qeueue
  */
-static int
-_fifo_map_swappable(struct mm_struct *mm, uintptr_t addr, struct Page *page, int swap_in)
-{
-    list_entry_t *head=(list_entry_t*) mm->sm_priv;
-    list_entry_t *entry=&(page->pra_page_link);
- 
+static int _fifo_map_swappable(struct mm_struct* mm,
+                               uintptr_t addr,
+                               struct Page* page,
+                               int swap_in) {
+    // 得到链表头节点
+    list_entry_t* head = (list_entry_t*)mm->sm_priv;
+    // 找到page结构中的链表节点
+    list_entry_t* entry = &(page->pra_page_link);
+
     assert(entry != NULL && head != NULL);
-    //record the page access situlation
-    /*LAB3 EXERCISE 2: YOUR CODE*/ 
-    //(1)link the most recent arrival page at the back of the pra_list_head qeueue.
+    // record the page access situlation
+    /*LAB3 EXERCISE 2: YOUR CODE*/
+    //(1)link the most recent arrival page at the back of the pra_list_head
+    // queue.
+
+    // 将其连入链表头的后面
+    list_add(head, entry);
     return 0;
 }
 /*
  *  (4)_fifo_swap_out_victim: According FIFO PRA, we should unlink the  earliest arrival page in front of pra_list_head qeueue,
  *                            then assign the value of *ptr_page to the addr of this page.
  */
-static int
-_fifo_swap_out_victim(struct mm_struct *mm, struct Page ** ptr_page, int in_tick)
-{
-     list_entry_t *head=(list_entry_t*) mm->sm_priv;
-         assert(head != NULL);
-     assert(in_tick==0);
-     /* Select the victim */
-     /*LAB3 EXERCISE 2: YOUR CODE*/ 
-     //(1)  unlink the  earliest arrival page in front of pra_list_head qeueue
-     //(2)  assign the value of *ptr_page to the addr of this page
-     return 0;
+static int _fifo_swap_out_victim(struct mm_struct* mm,
+                                 struct Page** ptr_page,
+                                 int in_tick) {
+    // 拿到链表头部
+    list_entry_t* head = (list_entry_t*)mm->sm_priv;
+    assert(head != NULL);
+    assert(in_tick == 0);
+    /* Select the victim */
+    /*LAB3 EXERCISE 2: YOUR CODE*/
+    //(1)  unlink the  earliest arrival page in front of pra_list_head qeueue
+    // 获得链表尾部的页并将其移除出链表
+    list_entry_t* le = head->prev;
+    list_del(le);
+    //(2)  assign the value of *ptr_page to the addr of this page
+    // 得到对应的Page结构，并保存在ptr_page中
+    struct Page* page = le2page(le, pra_page_link);
+    *ptr_page = page;
+    return 0;
 }
 
 static int

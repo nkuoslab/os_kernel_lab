@@ -375,6 +375,29 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create) {
     }
     return NULL;          // (8) return page table entry
 #endif
+    // 获取la对应的页目录项
+    pde_t* pdep = &pgdir[PDX(la)];
+    // 通过检查页目录项的存在位判断对应的二级页表是否存在
+    if (!(*pdep & 0x1)) {
+        if (create) {
+            // 不存在且create=1,则创建一个二级页表
+            struct Page* page = alloc_page();
+            // 给这个页设置引用位
+            set_page_ref(page, 1);
+            // 得到这个页的物理地址
+            uintptr_t pa = page2pa(page);
+            // 清空这一页表，注意memset使用的地址是内核虚拟地址
+            memset(KADDR(pa), 0, PGSIZE);
+            // 设置页目录表项的内容
+            // (页表起始物理地址 & ~0x0FFF) | PTE_U | PTE_W | PTE_P
+            // 为什么要去除后12位，因为指向的要是页目录项指向的是一个二级页表的起始地址
+            *pdep = (pa & ~0x0FFF) | PTE_U | PTE_W | PTE_P;
+        } else {
+            return NULL;
+        }
+    }
+    // 这里使用的地址也是虚拟地址
+    return &(((pte_t*)KADDR(*pdep & ~0xfff))[PTX(la)]);
 }
 
 //get_page - get related Page struct for linear address la using PDT pgdir
@@ -420,6 +443,21 @@ page_remove_pte(pde_t *pgdir, uintptr_t la, pte_t *ptep) {
                                   //(6) flush tlb
     }
 #endif
+
+    // 首先查看目前的页表项是否有效，查看最低位PTE_P
+    if (*ptep & 0x1) {
+        // 有效就获得对应的Page结构
+        struct Page* page = pte2page(*ptep);
+        // 然后减少Page的ref位-1，并且根据返回值来判断是否应该释放这一Page
+        if (!page_ref_dec(page)) {
+            // 如果为0则释放这一Page
+            free_page(page);
+        }
+        // 清除二级页表项
+        *ptep = 0;
+        // 标记TLB中的这一Page无效
+        tlb_invalidate(pgdir, la);
+    }
 }
 
 //page_remove - free an Page which is related linear address la and has an validated pte

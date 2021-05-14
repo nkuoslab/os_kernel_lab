@@ -9,7 +9,7 @@
 
 整个中断处理流程大致如下：
 
-1. 产生中断后，`CPU` 跳转到相应的中断处理入口 (`vectors`)，并在桟中压入相应的` error_code`（是否存在与异常号相关） 以及 `trap_no`，然后跳转到` alltraps` 函数入口。
+1. 产生中断后，`CPU` 跳转到相应的中断处理入口 (`vectors`)，并在栈中压入相应的` error_code`（是否存在与异常号相关） 以及 `trap_no`，然后跳转到` alltraps` 函数入口。
 
    在栈中保存当前被打断程序的` trapframe` 结构(参见过程`trapentry.S`)。设置` kernel `(内核) 的数据段寄存器，最后压入` esp`，作为 `trap `函数参数(`struct trapframe * tf`) 并跳转到中断处理函数` trap `处
 
@@ -152,7 +152,7 @@ struct vma_struct* vma_create(uintptr_t vm_start,
 
 ```c
 // vmm.c
-// find_vma - find a vma  (vma->vm_start <= addr <= vma_vm_end)
+// find_vma - find a vma  (vma->vm_start <= addr < vma_vm_end)
 struct vma_struct* find_vma(struct mm_struct* mm, uintptr_t addr) {
     struct vma_struct* vma = NULL;
     if (mm != NULL) {
@@ -281,7 +281,7 @@ void mm_destroy(struct mm_struct* mm) {
 
 `CR2`是页故障线性地址寄存器，保存最后一次出现页故障的全32位线性地址。
 
-页访问异常错误码有32位。位0为1表示对应物理页不存在；位1为1表示写异常（比如写了只读页)；位2为1表示访问权限异常（比如用户态程序访问内核空间的数据）
+页访问异常错误码有32位。位0为1表示对应物理页存在；位1为1表示写异常（比如写了只读页)；位2为1表示访问权限异常（比如用户态程序访问内核空间的数据）
 
 `CPU`在当前内核栈保存当前被打断的程序现场，即依次压入当前被打断程序使用的`EFLAGS`，`CS`，`EIP`，`errorCode`；由于页访问异常的中断号是`0xE`，`CPU`把异常中断号`0xE`对应的中断服务例程的地址（`vectors.S`中的标号`vector14`处）加载到`CS`和`EIP`寄存器中，开始执行中断服务例程。这时`ucore`开始处理异常中断，首先需要保存硬件没有保存的寄存器。在`vectors.S`中的标号`vector14`处先把中断号压入内核栈，然后再在`trapentry.S`中的标号`__alltraps`处把`DS`、`ES`和其他通用寄存器都压栈。自此，被打断的程序执行现场（`context`）被保存在内核栈中。接下来，在`trap.c`的`trap`函数开始了中断服务例程的处理流程，大致调用关系为：
 
@@ -289,7 +289,7 @@ void mm_destroy(struct mm_struct* mm) {
 
 `ucore OS`会把这个值保存在`struct trapframe `中`tf_err`成员变量中。而中断服务例程会调用页访问异常处理函数`do_pgfault`进行具体处理。这里的页访问异常处理是实现按需分页、页换入换出机制的关键之处。
 
-`ucore`中`do_pgfault`函数是完成页访问异常处理的主要函数，它根据从`CPU`的控制寄存器`CR2`中获取的页访问异常的物理地址以及根据`errorCode`的错误类型来查找此地址是否在某个`VMA`的地址范围内以及是否满足正确的读写权限，如果在此范围内并且权限也正确，这认为这是一次合法访问，但没有建立虚实对应关系。所以需要分配一个空闲的内存页，并修改页表完成虚地址到物理地址的映射，刷新`TLB`，然后调用`iret`中断，返回到产生页访问异常的指令处重新执行此指令。如果该虚地址不在某`VMA`范围内，则认为是一次非法访问。
+`ucore`中`do_pgfault`函数是完成页访问异常处理的主要函数，它根据从`CPU`的控制寄存器`CR2`中获取的页访问异常的虚拟地址以及根据`errorCode`的错误类型来查找此地址是否在某个`VMA`的地址范围内以及是否满足正确的读写权限，如果在此范围内并且权限也正确，这认为这是一次合法访问，但没有建立虚实对应关系。所以需要分配一个空闲的内存页，并修改页表完成虚地址到物理地址的映射，刷新`TLB`，然后调用`iret`，返回到产生页访问异常的指令处重新执行此指令。如果该虚地址不在某`VMA`范围内，则认为是一次非法访问。
 
 ### 练习1：给未被映射的地址映射上物理页
 
@@ -464,7 +464,7 @@ int do_pgfault(struct mm_struct* mm, uint32_t error_code, uintptr_t addr) {
      * THEN
      *    continue process
      */
-    // 设置写pte用的权限
+    // 设置pte用的权限
     uint32_t perm = PTE_U;
     if (vma->vm_flags & VM_WRITE) {
         perm |= PTE_W;
@@ -598,7 +598,7 @@ static int pgfault_handler(struct trapframe* tf) {
 
 当一个`PTE`用来描述一般意义上的物理页时，显然它应该维护各种权限和映射关系，以及应该有`PTE_P`标记；但当它用来描述一个被置换出去的物理页时，它被用来维护该物理页与` swap `磁盘上扇区的映射关系，并且该` PTE `不应该由` MMU `将它解释成物理页映射(即没有` PTE_P` 标记)，与此同时对应的权限则交由` mm_struct `来维护，当对位于该页的内存地址进行访问的时候，必然导致` page fault`，然后`ucore`能够根据` PTE `描述的` swap `项将相应的物理页重新建立起来，并根据虚存所描述的权限重新设置好` PTE `使得内存访问能够继续正常进行。
 
-也就是说，当`PTE_P`为1时表明所映射的物理页存在，访问正常；为0时代表不存在，此时`pte`表示的是虚拟页与磁盘扇区的对应关系。在后者的情况下，`ucore`用`pte`的高24位数据表明这一页的起始扇区号。但是为了区分全0的`pte`与从`swap`分区的第一个扇区开始存的页对应的`pte`，`ucore`规定`swap`分区从第8个扇区开始用（即空一个页的大小）。简单说就是，表明虚拟页与磁盘扇区对应关系的`pte`的高24位不全为0。
+也就是说，当`PTE_P`为1时表明所映射的物理页存在，访问正常；为0时代表不存在，此时`pte`表示的是虚拟页与磁盘扇区的对应关系。在后者的情况下，`ucore`用`pte`的高24位数据表明这一页的起始扇区号。但是为了区分全0的`pte`与从`swap`分区的第一个扇区开始存的页对应的`pte`，`ucore`规定`swap`分区从第9个扇区开始用（即空一个页的大小）。简单说就是，表明虚拟页与磁盘扇区对应关系的`pte`的高24位不全为0。
 
 所以，`pte`就有以下三种情况：
 
@@ -902,7 +902,7 @@ static int _fifo_init_mm(struct mm_struct* mm) {
 
 #### `_fifo_map_swappable`
 
-记录被换出的页的相关属性
+记录页的相关属性，以便于`swap_manager`的管理 。
 
 ```c
 /*
@@ -1267,7 +1267,7 @@ static inline void check_content_set(void) {
     // 第一次访问4-8，异常数+1
     *(unsigned char*)0x1000 = 0x0a;
     assert(pgfault_num == 1);
-    // 第而次访问4-8，不发生缺页
+    // 第 次访问4-8，不发生缺页
     *(unsigned char*)0x1010 = 0x0a;
     assert(pgfault_num == 1);
     // 下面同样

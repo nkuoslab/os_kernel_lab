@@ -352,7 +352,7 @@ int do_pgfault(struct mm_struct* mm, uint32_t error_code, uintptr_t addr) {
      * THEN
      *    continue process
      */
-    // 设置写pte用的权限
+    // 设置pte用的权限
     uint32_t perm = PTE_U;
     if (vma->vm_flags & VM_WRITE) {
         perm |= PTE_W;
