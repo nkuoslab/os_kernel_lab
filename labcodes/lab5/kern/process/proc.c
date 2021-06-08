@@ -105,6 +105,14 @@ static struct proc_struct* alloc_proc(void) {
          * // Process flag char name[PROC_NAME_LEN + 1];               //
          * Process name
          */
+        // LAB5 YOUR CODE : (update LAB4 steps)
+        /*
+         * below fields(add in LAB5) in proc_struct need to be initialized
+         *       uint32_t wait_state;                        // waiting state
+         *       struct proc_struct *cptr, *yptr, *optr;     // relations
+         * between processes
+         */
+
         proc->state = PROC_UNINIT;
         proc->pid = -1;
         proc->runs = 0;
@@ -117,6 +125,8 @@ static struct proc_struct* alloc_proc(void) {
         proc->cr3 = boot_cr3;
         proc->flags = 0;
         memset(&(proc->name), 0, PROC_NAME_LEN + 1);
+        proc->wait_state = 0;
+        proc->cptr = proc->optr = proc->yptr = NULL;
     }
     return proc;
 }
@@ -392,13 +402,16 @@ int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe* tf) {
      * remove_links:  lean the relation links of process
      *    -------------------
      *    update step 1: set child proc's parent to current process, make sure
-     * current process's wait_state is 0 update step 5: insert proc_struct into
+     * current process's wait_state is 0
+     * update step 5: insert proc_struct into
      * hash_list && proc_list, set the relation links of process
      */
     if ((proc = alloc_proc()) == NULL) {
         goto fork_out;
     }
     proc->parent = current;
+    //确保当前进程为等待进程
+    assert(current->wait_state == 0);
     if (setup_kstack(proc) != 0) {
         goto bad_fork_cleanup_proc;
     }
@@ -411,8 +424,10 @@ int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe* tf) {
     {
         proc->pid = get_pid();
         hash_proc(proc);
-        nr_process++;
-        list_add(&proc_list, &(proc->list_link));
+        // 换用set_links
+        // nr_process++;
+        // list_add(&proc_list, &(proc->list_link));
+        set_links(proc);
     }
     local_intr_restore(intr_flag);
 
