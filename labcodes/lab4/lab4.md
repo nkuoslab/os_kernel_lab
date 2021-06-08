@@ -818,7 +818,7 @@ switch_to:                      # switch_to(from, to)
 前面的过程有些凌乱了，下面捋一下`initproc`的整个过程。
 
 - 通过`kernel_thread`函数，构造一个临时的`trap_frame`栈帧，其中设置了`CS`指向内核代码段选择子、`DS/ES/SS`等指向内核的数据段选择子。令中断栈帧中的`tf_regs.ebx`、`tf_regs.edx`保存函数`fn`和参数`arg`，`tf_eip`指向`kernel_thread_entry`。
-- 通过`do_fork`分配一个未初始化的线程控制块`proc_struct`，设置并初始化其一系列状态。通过`copy_thread`中设置断帧，设置线程上下文`struct context`中`eip`值为`forkret`，令上下文切换`switch`返回后跳转到`forkret`处，设置上下文中`esp`的值为内核栈的栈顶，此处存储的是中断帧。将`init_proc`加入`ucore`的就绪队列，等待`CPU`调度。
+- 通过`do_fork`分配一个未初始化的线程控制块`proc_struct`，设置并初始化其一系列状态。通过`copy_thread`中设置中断帧，设置线程上下文`struct context`中`eip`值为`forkret`，令上下文切换`switch`返回后跳转到`forkret`处，设置上下文中`esp`的值为内核栈的栈顶，此处存储的是中断帧。将`init_proc`加入`ucore`的就绪队列，等待`CPU`调度。
 - ` idle_proc`在`cpu_idle`中触发`schedule`，将`init_proc`线程从就绪队列中取出，执行`switch_to`进行`idle_proc`和`init_proc`的`context`线程上下文的切换。
 - `switch_to`返回时，`CPU`开始执行`init_proc`，跳转至`forkret`处。
 - `fork_ret`中，进行中断返回。将之前存放在内核栈中的中断帧中的数据依次弹出，并调整栈顶为`tf_eip`，`iret`后跳转至`kernel_thread_entry`处。
@@ -888,7 +888,7 @@ __trapret:
     iret
 ```
 
-注意在`call trap`之后，有一句`popl %esp`，事实上这里存储的应该就是中断帧`trapframe`，后续寄存器的恢复均是从`trapframe`中恢复。如果可以修改`esp`的值为其他的值，则可以实现向任意地址的跳转。（例如`lab1`标准答案中`challenge1`的实现）
+注意在`call trap`之后，有一句`popl %esp`，事实上这里存储的应该就是中断帧`trapframe`，后续寄存器的恢复均是从`trapframe`中恢复。如果可以修改`eip`的值为其他的值，则可以实现向任意地址的跳转。（例如`lab1`标准答案中`challenge1`的实现）
 
 `context`结构体干的事情也很简单，可以用`switch_to`函数囊括，即保存一系列寄存器，并恢复一系列寄存器。
 
